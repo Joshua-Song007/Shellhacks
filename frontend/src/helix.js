@@ -15,7 +15,8 @@ const baseOf = (hash) => 'ATGC'[parseInt(hash.slice(0, 2), 16) % 4];
 
 // bg = null renders transparent so the panel shows through; `length` is how much of the box the strand spans (>1 runs off the edges).
 // edgeScroll: hovering the top/bottom band of the box scrolls along the strand (and so does the wheel); onSelect(hit) fires on a block click.
-export function createHelix(canvas, { hashes, capacity = 160, tilt = 0, bg = null, length = 0.86, thickness = 0.55, particles = 300, reduced = false, edgeScroll = false, onHover = () => {}, onSelect = null, onEdge = () => {} }) {
+// edgeTop: px at the top that never scroll (window chrome overlaid on the canvas).
+export function createHelix(canvas, { hashes, capacity = 160, tilt = 0, bg = null, length = 0.86, thickness = 0.55, particles = 300, reduced = false, edgeScroll = false, edgeTop = 0, onHover = () => {}, onSelect = null, onEdge = () => {} }) {
   const SP = 0.34;
   const R = 0.62;
   const TWIST = 0.36;
@@ -160,6 +161,9 @@ export function createHelix(canvas, { hashes, capacity = 160, tilt = 0, bg = nul
     pointer.active = true;
   });
   canvas.addEventListener('pointerleave', () => (pointer.active = false));
+  // Native window controls overlay the page without a pointerleave; drop the stale position when the cursor leaves the page or the window blurs.
+  document.addEventListener('mouseleave', () => (pointer.active = false));
+  addEventListener('blur', () => (pointer.active = false));
   if (edgeScroll) canvas.addEventListener('wheel', (e) => (wheel -= e.deltaY * 0.004), { passive: true });
   if (onSelect)
     canvas.addEventListener('click', () => {
@@ -195,7 +199,8 @@ export function createHelix(canvas, { hashes, capacity = 160, tilt = 0, bg = nul
     if (edgeScroll) {
       // Depth into the top/bottom 16% band sets the speed; clamp so the strand's ends stop at the box edge.
       const band = 0.16 * h;
-      const depth = !pointer.active ? 0 : pointer.y < band ? 1 - pointer.y / band : pointer.y > h - band ? -(1 - (h - pointer.y) / band) : 0;
+      const top = pointer.y - edgeTop;
+      const depth = !pointer.active || top < 0 ? 0 : top < band ? 1 - top / band : pointer.y > h - band ? -(1 - (h - pointer.y) / band) : 0;
       const e = Math.sign(depth);
       if (e !== edge) onEdge((edge = e));
       const max = Math.max(0, ((count - 1) / 2) * SP + SP * 2 - along / 2 / fit);

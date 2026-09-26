@@ -54,6 +54,7 @@ const helix = createHelix($('#global-gl'), {
   particles: 1100,
   reduced,
   edgeScroll: true,
+  edgeTop: 44, // macOS traffic lights (hiddenInset title bar) sit over the canvas; hovering them must not scroll
   onEdge: (e) => {
     $('.edge-cue.top').classList.toggle('on', e > 0);
     $('.edge-cue.bottom').classList.toggle('on', e < 0);

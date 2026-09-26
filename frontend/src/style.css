@@ -278,7 +278,7 @@ body[data-alert='cured'] .live-dot { background: var(--t); box-shadow: 0 0 10px 
 
 /* Global genome: edge-scroll cues + block details */
 .edge-cue { position: fixed; left: 0; right: 0; height: 16vh; display: grid; place-items: center; pointer-events: none; opacity: 0; transition: opacity 0.35s; }
-.edge-cue.top { top: 0; align-items: start; padding-top: 14px; background: linear-gradient(rgba(79, 245, 210, 0.07), transparent); }
+.edge-cue.top { top: 44px; align-items: start; padding-top: 10px; background: linear-gradient(rgba(79, 245, 210, 0.07), transparent); }
 .edge-cue.bottom { bottom: 0; align-items: end; padding-bottom: 14px; background: linear-gradient(transparent, rgba(79, 245, 210, 0.07)); }
 .edge-cue.on { opacity: 1; }
 .edge-cue svg { width: 22px; height: 22px; fill: none; stroke: var(--a); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 0 6px var(--a)); }
