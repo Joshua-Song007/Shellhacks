@@ -60,7 +60,7 @@ spikes/           spike1_eslogger.sh, spike1_trigger.c, spike2_libp2p_pair.rs, s
 - ledger-program -> (none internal; standalone Anchor program)
 - ledger-client -> t_cell (path dependency on `crates/ledger-program/programs/t_cell`, `cpi` feature — a concrete cross-workspace dependency, not just an abstract "account layout/IDL" note; reuses t_cell's Anchor-generated instruction/accounts/state types directly rather than hand-encoding Borsh)
 - mesh -> ledger-client (async chain lookup, verify.rs::confirm_via_chain -- real now, not just planned). NOT tes: DATA-3's payload (message.rs's CureHint) never needed a tes::schema type, its fields are already plain [u8;32]/u64/Vec<u8> -- the "mesh -> tes" edge in overview.md's dependency sketch never materialized as an actual `use tes::...` anywhere in this crate; if that stays true through revocation.rs (Phase 6 now fully built), architecture.md's dependency line should probably just drop tes, but leaving the note here rather than silently deleting the edge without user sign-off
-- trace-capture -> tes (offline, isolated; not on hot path of scout/soldier)
+- trace-capture -> tes, scout (narrow: source_eslogger::map_line only, user-approved 2026-09-26 -- not the live detection pipeline, not reader::spawn) (offline, isolated; not on hot path of scout/soldier)
 - dashboard -> scout (telemetry stream), ledger-client (ledger feed), mesh (My Devices status)
 - spikes -> none (throwaway, gate Phase 1+ start)
 

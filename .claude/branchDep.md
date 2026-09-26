@@ -44,6 +44,7 @@
 | mesh | tempfile | "3" -> resolved 3.27.0 | dev | test-only identity persistence paths and tests/pairing.rs's temp keypair files |
 | mesh | ledger-client | path (`../ledger-client`) | normal | fulfills architecture.md's previously-aspirational "mesh -> ledger-client (async chain lookup)" edge; verify.rs::confirm_via_chain is the first real user |
 | mesh | solana-client/-pubkey/-commitment-config/-keypair/-signer | "3"/"3.0.0"/"3"/"3.1.2"/"3.0.1" | dev | tests/chain_lookup.rs only — talks to a local solana-test-validator directly (funding, building a payer/committee), same pattern ledger-client's own local-validator tests use |
+| trace-capture | tes, scout | path | normal | no new external crates — scout is a narrow reuse of source_eslogger::map_line only (user-approved 2026-09-26), not the live detection pipeline |
 
 ## Mesh (`crates/mesh/`)
 - SPIKE-2 (plan.md Phase 0) PASSED 2026-09-26 before this crate was built: two libp2p 0.54.1 peers paired over manual IP with Noise, no mDNS, ~175us ping RTT on loopback (two OS processes, since no second physical device/hotspot was available in this dev environment)
@@ -54,6 +55,10 @@
 - toolchain confirmed present: anchor-cli 1.1.2, solana-cli 3.1.10 (see Toolchain above)
 - 5 devnet-only PoI committee keypairs generated 2026-09-26 via `solana-keygen new`, stored gitignored under `crates/ledger-program/keys/poi-{1..5}.json`; their pubkeys are hardcoded into `poi.rs`'s `POI_COMMITTEE` const (see plan.md Phase 4 for why hardcoded vs. a runtime config account); original 5 lost from disk, REGENERATED 2026-09-26 (new pubkeys DuUq…/AYGK…/AuoR…/8DPZ…/GTK9… now in poi.rs) — the live devnet program still has the OLD committee compiled in until upgraded
 - deployed live to devnet 2026-09-26 (Phase 5, FR-L-1): program id `27v76nMPKQg5akQHBsPHnhPt8K7kSf3s8GZjRzUnvBuq`, upgrade authority = `HeAubH3AUZDwztNC3BCsDSacnGSAXnd2ZpLJ3H68W6b3` (NOT this machine's `~/.config/solana/id.json` = `Apz5x…YN56s`; authority keypair not found on this machine — likely the other engineer's wallet); verified end-to-end via `crates/ledger-client/examples/devnet_smoke.rs` (submit_threat -> commit_gene -> suppress_gene, all confirmed on-chain — AC-5)
+
+## Trace-capture (`crates/trace-capture/`)
+- SPIKE-3 (plan.md Phase 0) PASSED 2026-09-26 before this crate was built: a real Atomic Red Team atomic (T1070.004 Test #2, "Delete an entire folder") captured cleanly via eslogger + sandbox-exec isolation, 318 raw lines / 0 rejected when replayed through scout's real pipeline. Full method/findings in spikes/spike3_art_capture.md.
+- real finding while running SPIKE-3 manually: backgrounding `sudo eslogger ...` with `&` immediately (no cached sudo timestamp yet) meant sudo couldn't get an interactive password prompt at all — the redirected capture file never even got created, silently. Fixed by running `sudo -v` alone first (foreground, real prompt) before the backgrounded capture command. trace-capture/main.rs itself doesn't hit this: it's meant to be invoked as `sudo trace-capture ...` directly (the whole process already root), matching scout main.rs's own `sudo scout` convention, so there's no internal sudo call to race against a TTY at all.
 
 ## System tools used at runtime
 - `eslogger` (macOS 13+, root + Full Disk Access) — Scout primary source; verified on macOS 26.4.1 (SPIKE-1)
