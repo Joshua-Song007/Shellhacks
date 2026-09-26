@@ -1,5 +1,6 @@
 import gsap from 'gsap';
-import { feed, state, inject, suppress, ALLELES, ACT_LABEL, evaluate, startPairing, cancelPairing, confirmPairing, fingerprint } from './data.js';
+import { feed, state, inject, suppress, ALLELES, ACT_LABEL, evaluate, startPairing, cancelPairing, revoke } from './data.js';
+import QRCode from 'qrcode';
 import { createHelix } from './helix.js';
 import { createMesh, LABEL, GLYPH } from './mesh.js';
 
@@ -98,12 +99,13 @@ function renderHealth() {
 }
 
 // ---------- Mesh ----------
-const mesh = createMesh($('#mesh'), state.devices, state.self, { reduced });
+const mesh = createMesh($('#mesh'), state.devices, state.self, { reduced, onPick: (id) => askRemove(id) });
 
-// ---------- Add a trusted device (FR-M-1 pairing) ----------
+// ---------- Add / remove trusted devices (FR-M-1 pairing, FR-M-7 revocation) ----------
 const pairDlg = $('#pair');
 let pairTimer = 0;
 let pairBar = null;
+let removing = null;
 function pairStep(step) {
   pairDlg.querySelectorAll('.pair-step').forEach((s) => (s.hidden = s.dataset.step !== step));
   const shown = pairDlg.querySelector(`[data-step="${step}"]`);
@@ -114,55 +116,74 @@ function stopPairClock() {
   clearInterval(pairTimer);
   pairBar?.kill();
 }
-function beginPairing() {
-  const { code, expires } = startPairing();
-  const pc = $('#pair-code');
-  pc.setAttribute('aria-label', `Pairing code ${code.split('').join(' ')}`);
-  pc.innerHTML = [...code].map((c, i) => `<span${i === 3 ? ' class="gap"' : ''}>${c}</span>`).join('');
+function openDialog(step) {
+  pairDlg.showModal();
+  if (!reduced) gsap.fromTo(pairDlg, { opacity: 0, scale: 0.96, y: 10 }, { opacity: 1, scale: 1, y: 0, duration: 0.45, ease: 'expo.out' });
+  pairStep(step);
+}
+async function beginPairing() {
+  const code = startPairing();
+  // Light modules on dark: phone cameras read either, and this keeps the panel from flashing white.
+  $('#pair-qr').innerHTML = await QRCode.toString(code.uri, { type: 'svg', margin: 0, errorCorrectionLevel: 'M', color: { dark: '#e6eef0', light: '#0000' } });
+  $('#pair-hex').textContent = code.nonce.match(/.{4}/g).join(' ');
+  $('#pair-copy').textContent = 'Copy';
   stopPairClock();
   const left = () => {
-    const s = Math.max(0, Math.ceil((expires - Date.now()) / 1000));
+    const s = Math.max(0, Math.ceil((code.expires - Date.now()) / 1000));
     $('#pair-left').textContent = `Expires in ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
   };
   left();
   pairTimer = setInterval(left, 1000);
-  pairBar = gsap.fromTo('#pair-bar', { scaleX: 1 }, { scaleX: 0, duration: (expires - Date.now()) / 1000, ease: 'none' });
+  pairBar = gsap.fromTo('#pair-bar', { scaleX: 1 }, { scaleX: 0, duration: (code.expires - Date.now()) / 1000, ease: 'none' });
   pairStep('code');
-  if (!reduced) gsap.fromTo(pc.children, { opacity: 0, y: 14, rotateX: -70 }, { opacity: 1, y: 0, rotateX: 0, duration: 0.6, ease: 'back.out(2)', stagger: 0.06, delay: 0.15 });
+  if (!reduced) gsap.fromTo('#pair-qr svg', { opacity: 0, scale: 0.9, filter: 'blur(6px)' }, { opacity: 1, scale: 1, filter: 'blur(0px)', duration: 0.7, ease: 'expo.out', delay: 0.1 });
 }
 function closePairing() {
   stopPairClock();
   cancelPairing();
+  removing = null;
   if (!pairDlg.open) return;
   if (reduced) return pairDlg.close();
   gsap.to(pairDlg, { opacity: 0, scale: 0.97, duration: 0.2, ease: 'power2.in', onComplete: () => (pairDlg.close(), gsap.set(pairDlg, { clearProps: 'opacity,scale' })) });
 }
-$('#add-device').addEventListener('click', () => {
-  pairDlg.showModal();
-  if (!reduced) gsap.fromTo(pairDlg, { opacity: 0, scale: 0.96, y: 10 }, { opacity: 1, scale: 1, y: 0, duration: 0.45, ease: 'expo.out' });
-  beginPairing();
-});
+$('#add-device').addEventListener('click', () => (openDialog('code'), beginPairing()));
 pairDlg.addEventListener('cancel', (e) => (e.preventDefault(), closePairing())); // Esc
 pairDlg.addEventListener('click', (e) => {
   if (e.target === pairDlg) return closePairing(); // backdrop
   const act = e.target.closest('[data-act]')?.dataset.act;
   if (act === 'cancel') closePairing();
   if (act === 'restart') beginPairing();
-  if (act === 'trust' || act === 'reject') {
-    confirmPairing(act === 'trust');
+  if (act === 'copy') navigator.clipboard?.writeText($('#pair-hex').textContent.replace(/ /g, '')).then(() => ($('#pair-copy').textContent = 'Copied'));
+  if (act === 'revoke') {
+    revoke(removing);
     closePairing();
   }
 });
+const FAIL = {
+  expired: ['This code expired', "Codes last 5 minutes so an old one can't be reused. Get a new code and try again."],
+  Expired: ['This code expired', "The device used the code after it ran out. Get a new code and try again."],
+  NonceMismatch: ['That code didn’t match', 'A device presented a different code and was refused. Get a new code and scan it again.'],
+};
 feed.addEventListener('pair', ({ detail }) => {
-  if (!pairDlg.open) return;
+  if (!pairDlg.open || removing) return;
   stopPairClock();
-  if (detail.phase === 'expired') return pairStep('expired');
-  const d = detail.device;
-  $('#pair-ask').textContent = `Trust ${d.name}?`;
-  $('#pair-glyph').setAttribute('d', GLYPH[d.kind]);
-  $('#pair-words').innerHTML = fingerprint(d.pubkey).map((w) => `<li>${w}</li>`).join('');
-  pairStep('confirm');
+  if (detail.phase === 'paired') {
+    $('#pair-done').textContent = `${detail.device.name} joined`;
+    $('#pair-glyph').setAttribute('d', GLYPH[detail.device.kind]);
+    return pairStep('paired');
+  }
+  const [title, body] = FAIL[detail.error ?? 'expired'];
+  $('#pair-fail-title').textContent = title;
+  $('#pair-fail').textContent = body;
+  pairStep('failed');
 });
+function askRemove(id) {
+  const d = state.devices.find((x) => x.id === id);
+  if (!d || (d.status !== 'clean' && d.status !== 'cured')) return; // not while it's mid-response
+  removing = id;
+  $('#rm-title').textContent = `Remove ${d.name}?`;
+  openDialog('remove');
+}
 
 // ---------- Local genome helix ----------
 const probe = $('#local-probe');

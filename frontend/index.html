@@ -51,7 +51,7 @@
         <header class="panel-head mesh-head">
           <div>
             <h2 id="mesh-title">Your local network</h2>
-            <p>When one device learns a cure, it passes it to the others.</p>
+            <p>When one device learns a cure, it passes it to the others. Select a device to remove it.</p>
           </div>
           <button class="btn btn-sm btn-line" id="add-device">
             <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12M4 10h12" /></svg>
@@ -152,23 +152,31 @@
     <dialog class="pair" id="pair" aria-labelledby="pair-title">
       <section class="pair-step" data-step="code">
         <h2 id="pair-title">Add a trusted device</h2>
-        <p>On the new device, open T-Cell, choose <b>Join a network</b> and type this code.</p>
-        <div class="pair-code" id="pair-code" role="text"></div>
+        <p>On the new device, open T-Cell, choose <b>Join a network</b> and scan this code.</p>
+        <div class="pair-qr" id="pair-qr" role="img" aria-label="Pairing QR code"></div>
         <div class="pair-timer"><span class="pair-bar"><i id="pair-bar"></i></span><span id="pair-left"></span></div>
-        <p class="pair-wait"><span class="pair-dot"></span>Waiting for the new device</p>
+        <details class="pair-manual">
+          <summary>Can't scan? Enter the code instead</summary>
+          <div class="pair-hex"><code id="pair-hex"></code><button class="btn-quiet" data-act="copy" id="pair-copy">Copy</button></div>
+        </details>
+        <p class="pair-wait" id="pair-wait"><span class="pair-dot"></span>Waiting for the new device</p>
         <footer><button class="btn-quiet" data-act="cancel">Cancel</button></footer>
       </section>
-      <section class="pair-step" data-step="confirm" hidden>
+      <section class="pair-step" data-step="paired" hidden>
         <svg class="pair-glyph" viewBox="0 0 24 24" aria-hidden="true"><path id="pair-glyph" /></svg>
-        <h2 id="pair-ask"></h2>
-        <p>Check that the new device shows these same four words. If they don't match, someone else has your code, so don't trust it.</p>
-        <ol class="pair-words" id="pair-words"></ol>
-        <footer><button class="btn-quiet" data-act="reject">Words don't match</button><button class="btn" data-act="trust">Trust this device</button></footer>
+        <h2 id="pair-done"></h2>
+        <p>It now shares cures with your other devices, and they share theirs with it.</p>
+        <footer><button class="btn" data-act="cancel">Done</button></footer>
       </section>
-      <section class="pair-step" data-step="expired" hidden>
-        <h2>This code expired</h2>
-        <p>Codes last 5 minutes so an old one can't be reused. Get a new code and try again.</p>
+      <section class="pair-step" data-step="failed" hidden>
+        <h2 id="pair-fail-title"></h2>
+        <p id="pair-fail"></p>
         <footer><button class="btn-quiet" data-act="cancel">Close</button><button class="btn" data-act="restart">Get a new code</button></footer>
+      </section>
+      <section class="pair-step" data-step="remove" hidden>
+        <h2 id="rm-title"></h2>
+        <p>It stops sending and receiving cures right away, and anything it sends later is refused. To add it back, pair it again with a new code.</p>
+        <footer><button class="btn-quiet" data-act="cancel">Keep it</button><button class="btn btn-danger" data-act="revoke">Remove device</button></footer>
       </section>
     </dialog>
 

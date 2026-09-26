@@ -9,7 +9,7 @@
 //   'stats'    state.stats / state.lineages refreshed
 //   'log'      detail = { t, src: 'tes'|'scout'|'soldier'|'ledger'|'mesh', level: 'info'|'warn'|'alert'|'ok', msg }
 //   'threat'   state.incident changed (lineage tree, allele search, time-to-immunity marks, suppression)
-//   'pair'     detail = { phase: 'request', device } a device entered this device's pairing code | { phase: 'expired' }
+//   'pair'     detail = { phase: 'paired', device } a device redeemed this device's pairing code | { phase: 'error', error: 'Expired'|'NonceMismatch' } | { phase: 'expired' }
 
 export const feed = new EventTarget();
 const emit = (type, detail) => feed.dispatchEvent(new CustomEvent(type, { detail }));
@@ -226,8 +226,11 @@ export async function suppress() {
   changed();
 }
 
-// ---------- Pairing (FR-M-1): one-time code, 5 min expiry, the new device's Ed25519 pubkey joins the household ----------
-// ponytail: simulated; Phase 6 mesh (crates/mesh identity.rs) is unbuilt. A "new device" enters the code a few seconds in.
+// ---------- Pairing (FR-M-1) + revocation (FR-M-7), mirroring crates/mesh identity.rs / revocation.rs ----------
+// identity.rs: PairingCode = { nonce: 16 random bytes, issuer: this device's pubkey, expires_at: now + 5 min }.
+// The new device gets the nonce out of band (the QR), presents it back, and Roster::redeem checks expiry, then the
+// nonce (constant-time), then records the key; redeeming an already-paired key is a no-op.
+// ponytail: simulated; the Electron app has no bridge to crates/mesh yet, so a fake device redeems 3.5-6s in.
 export const PAIR_TTL = 5 * 60_000;
 const NEW_DEVICES = [
   { name: 'Guest MacBook Air', kind: 'laptop' },
@@ -235,26 +238,25 @@ const NEW_DEVICES = [
   { name: 'Garage device mini', kind: 'mini' },
   { name: 'Living room iMac', kind: 'desktop' },
 ];
-// Short word list for comparing key fingerprints by eye (both screens show the same 4 words).
-const WORDS = ['amber', 'cedar', 'delta', 'ember', 'fjord', 'grove', 'harbor', 'iris', 'juniper', 'kelp', 'lumen', 'maple', 'nectar', 'orbit', 'pebble', 'quartz'];
-export const fingerprint = (pubkey) => [0, 2, 4, 6].map((i) => WORDS[parseInt(pubkey.slice(i, i + 2), 16) % WORDS.length]);
+const self = () => device(state.self);
+export const revoked = new Set(); // revocation.rs: a CRL of pubkeys, separate from the roster
 
 let pairing = null;
 export function startPairing() {
   cancelPairing();
-  const code = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1_000_000).padStart(6, '0');
-  const p = (pairing = { code, expires: Date.now() + PAIR_TTL, candidate: null });
+  const code = { nonce: hex(16), issuer: self().pubkey, expires: Date.now() + PAIR_TTL };
+  // ponytail: QR payload format is ours, identity.rs only defines the nonce + issuer it must carry.
+  code.uri = `tcell://pair?issuer=${code.issuer}&nonce=${code.nonce}`;
+  const p = (pairing = { code });
+  log('mesh', 'info', `PairingCode issued, nonce ${code.nonce.slice(0, 8)}…, expires in 5 min`);
   const left = NEW_DEVICES.filter((n) => !state.devices.some((d) => d.name === n.name));
-  log('mesh', 'info', `pairing code issued, expires in 5 min`);
   p.timer = setTimeout(() => {
     if (pairing !== p || !left.length) return;
     const n = pick(left);
-    p.candidate = { ...n, id: `dev-${hex(3)}`, pubkey: hex(32) };
-    log('mesh', 'info', `${n.name} presented code; pubkey ${p.candidate.pubkey.slice(0, 12)}… awaiting approval`);
-    emit('pair', { phase: 'request', device: p.candidate });
+    redeem({ ...n, id: `dev-${hex(3)}`, pubkey: hex(32) }, code.nonce);
   }, rand(3500, 6000));
-  p.expiry = setTimeout(() => pairing === p && (cancelPairing(), emit('pair', { phase: 'expired' })), PAIR_TTL);
-  return { code, expires: p.expires };
+  p.expiry = setTimeout(() => pairing === p && (cancelPairing(), emit('pair', { phase: 'expired' })), PAIR_TTL + 50);
+  return code;
 }
 export function cancelPairing() {
   if (!pairing) return;
@@ -262,15 +264,33 @@ export function cancelPairing() {
   clearTimeout(pairing.expiry);
   pairing = null;
 }
-export function confirmPairing(trust) {
-  const c = pairing?.candidate;
-  cancelPairing();
-  if (!c) return;
-  if (!trust) return log('mesh', 'warn', `${c.name} rejected; pubkey not recorded`);
-  state.devices.push({ ...c, status: 'clean', heartbeat: Date.now() });
-  log('mesh', 'ok', `${c.name} paired; pubkey ${c.pubkey.slice(0, 12)}… added to household roster`);
+// Roster::redeem, same order of checks. Errors mirror identity.rs's PairingError.
+function redeem(dev, presentedNonce) {
+  const code = pairing?.code;
+  if (!code || Date.now() > code.expires) return emit('pair', { phase: 'error', error: 'Expired' });
+  if (presentedNonce !== code.nonce) {
+    log('mesh', 'warn', `${dev.name} presented a wrong nonce; refused (NonceMismatch)`);
+    return emit('pair', { phase: 'error', error: 'NonceMismatch' });
+  }
+  cancelPairing(); // one-time: the code is spent
+  if (state.devices.some((d) => d.pubkey === dev.pubkey)) return; // already paired: no-op, no duplicate
+  revoked.delete(dev.pubkey); // re-attestation = a fresh pairing
+  state.devices.push({ ...dev, status: 'clean', heartbeat: Date.now() });
+  log('mesh', 'ok', `${dev.name} redeemed the pairing code; pubkey ${dev.pubkey.slice(0, 12)}… added to the household roster`);
+  emit('pair', { phase: 'paired', device: dev });
   emit('devices', state.devices);
-  setTimeout(() => emit('mesh', { from: state.self, to: [c.id] }), 1200); // hand the new node the current immune memory, once it has slid into place
+  setTimeout(() => emit('mesh', { from: state.self, to: [dev.id] }), 1200); // hand the new node the current immune memory, once it has slid into place
+}
+
+// RevocationList::revoke: the key stays known but every cure hint it signs is rejected from now on.
+export function revoke(id) {
+  const d = device(id);
+  if (!d || id === state.self) return;
+  if (state.incident && !state.incident.done && state.incident.device === id) return; // mid-response: let it finish first
+  revoked.add(d.pubkey);
+  state.devices = state.devices.filter((x) => x !== d);
+  log('mesh', 'warn', `${d.name} revoked; pubkey ${d.pubkey.slice(0, 12)}… added to the revocation list`);
+  emit('devices', state.devices);
 }
 
 let nextIncident;

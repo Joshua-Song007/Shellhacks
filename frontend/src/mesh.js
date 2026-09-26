@@ -16,7 +16,7 @@ const el = (tag, attrs = {}, parent) => {
 };
 
 // Full-mesh graph of lymph nodes. The local device sits in the middle.
-export function createMesh(svg, devices, selfId, { reduced }) {
+export function createMesh(svg, devices, selfId, { reduced, onPick = () => {} }) {
   const W = 600;
   const H = 360;
   const pos = {}; // id -> { x, y }, tweened when a device joins
@@ -47,6 +47,13 @@ export function createMesh(svg, devices, selfId, { reduced }) {
 
   function addNode(d) {
     const g = el('g', { class: 'node', 'data-s': d.status }, gNodes);
+    if (d.id !== selfId) {
+      // Other devices are buttons: picking one offers to remove it.
+      Object.entries({ tabindex: 0, role: 'button', 'aria-label': `${d.name}. Remove from this network` }).forEach(([k, v]) => g.setAttribute(k, v));
+      g.classList.add('pickable');
+      g.addEventListener('click', () => onPick(d.id));
+      g.addEventListener('keydown', (e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onPick(d.id)));
+    }
     el('circle', { class: 'halo', r: 34 }, g);
     el('circle', { class: 'disc', r: 27 }, g);
     el('path', { class: 'glyph', d: GLYPH[d.kind], transform: 'translate(-15 -15) scale(1.25)' }, g);
@@ -77,7 +84,21 @@ export function createMesh(svg, devices, selfId, { reduced }) {
     tl.fromTo(g.querySelector('.halo'), { attr: { r: 30 }, opacity: 1 }, { attr: { r: 60 }, opacity: 0, duration: 1.4, ease: 'expo.out' }, 0.9);
   }
 
+  // A device was revoked: it fades out, its links go with it, and the rest close the gap.
+  function leave(id) {
+    const { g } = nodes[id];
+    const links = gLinks.querySelectorAll(`[data-a="${id}"], [data-b="${id}"]`);
+    ids = ids.filter((x) => x !== id);
+    delete nodes[id];
+    const t = targets();
+    const tl = gsap.timeline({ onUpdate: draw, defaults: { duration: reduced ? 0 : 0.9, ease: 'expo.inOut' } });
+    tl.to([g, ...links], { opacity: 0, duration: reduced ? 0 : 0.35, ease: 'power2.in', onComplete: () => (g.remove(), links.forEach((l) => l.remove())) }, 0);
+    for (const x of ids) tl.to(pos[x], { x: t[x][0], y: t[x][1] }, reduced ? 0 : 0.25);
+    if (reduced) draw();
+  }
+
   function update(list) {
+    for (const id of [...ids]) if (!list.some((d) => d.id === id)) leave(id);
     for (const d of list) {
       if (!nodes[d.id]) join(d);
       const n = nodes[d.id];

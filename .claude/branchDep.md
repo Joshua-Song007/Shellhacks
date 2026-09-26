@@ -60,6 +60,15 @@
 - SPIKE-3 (plan.md Phase 0) PASSED 2026-09-26 before this crate was built: a real Atomic Red Team atomic (T1070.004 Test #2, "Delete an entire folder") captured cleanly via eslogger + sandbox-exec isolation, 318 raw lines / 0 rejected when replayed through scout's real pipeline. Full method/findings in spikes/spike3_art_capture.md.
 - real finding while running SPIKE-3 manually: backgrounding `sudo eslogger ...` with `&` immediately (no cached sudo timestamp yet) meant sudo couldn't get an interactive password prompt at all — the redirected capture file never even got created, silently. Fixed by running `sudo -v` alone first (foreground, real prompt) before the backgrounded capture command. trace-capture/main.rs itself doesn't hit this: it's meant to be invoked as `sudo trace-capture ...` directly (the whole process already root), matching scout main.rs's own `sudo scout` convention, so there's no internal sudo call to race against a TTY at all.
 
+## Frontend (`frontend/`, npm)
+| Dep | Version | Kind | Notes |
+|---|---|---|---|
+| gsap | ^3.15.0 | normal | all UI motion |
+| three | ^0.186.1 | normal | helix renderer (helix.js) |
+| qrcode | ^1.5.4 | normal | renders the pairing QR (identity.rs leaves QR rendering to the dashboard); added 2026-09-26 |
+| electron | ^44.4.5 | dev | desktop shell |
+| vite | ^8.3.1 | dev | dev server / bundler |
+
 ## System tools used at runtime
 - `eslogger` (macOS 13+, root + Full Disk Access) — Scout primary source; verified on macOS 26.4.1 (SPIKE-1)
 - `cc` (Xcode CLT) — builds spikes/spike1_trigger.c
