@@ -28,9 +28,16 @@ spikes/           spike1_eslogger.sh, spike1_trigger.c, spike2_libp2p_pair.rs, s
 - bin/ac2_bench -> source_eslogger::{spawn, map_line}, reader::{spawn, now_ns}, scoring::{Action, exec_actions}, tes::Validator; standalone binary, not linked by main.rs
 - reader, lineage, source_eslogger -> no other scout module
 
+## Soldier internals (A -> B means A calls/uses B)
+- trigger -> scout::scoring::WakeSignal (deserializes the line Scout's send_wake writes); no other scout/tes symbol
+- sandbox -> wasmi only; no tes/scout dependency
+- allele_search -> scout::scoring::Action (containment_value reuses Action::weight() rather than a second weight table); no tes dependency; defines the ContainmentTarget trait, implemented by replay_target
+- replay_target -> scout::scoring::{Action, exec_actions, BURST_WINDOW_NS, BURST_OPS} (pure/stateless helpers only, not Scorer/lineage), tes::schema::{TesEvent, Event}; implements allele_search::ContainmentTarget
+- lib.rs -> trigger, sandbox, allele_search, replay_target (module declarations only)
+
 ## Dependency graph (A -> B means A depends on B)
 - scout -> tes
-- soldier -> tes, scout (wake-signal contract only — `scout::scoring::{WakeSignal, Action}` — not scout internals)
+- soldier -> tes, scout (wake-signal contract plus a handful of scout::scoring's pure, stateless helpers — `WakeSignal`, `Action`, `exec_actions`, `BURST_WINDOW_NS`, `BURST_OPS` — never Scorer/lineage/host-detection internals)
 - ledger-program -> (none internal; standalone Anchor program)
 - ledger-client -> ledger-program (account layout/IDL)
 - mesh -> tes (DATA-3 payload), ledger-client (async chain lookup)
@@ -45,4 +52,5 @@ spikes/           spike1_eslogger.sh, spike1_trigger.c, spike2_libp2p_pair.rs, s
 - reader.rs (scout) sits between source_eslogger.rs's stdout and tes::validate; decouples pipe read from parse so a slow parser can't backpressure the OS pipe (FR-D-7a); its drop counter + validate.rs's seq-gap counter are the two observable-loss signals required by NFR-7.
 - source_beacon.rs is intentionally outside the tes/Pipeline dependency graph: TES v1 (DATA-1) models a lossless, nanosecond-precision event stream, and an `lsof -i` poll is neither (see plan.md). Its findings are their own `network_finding` stdout record, un-scored and never fed to `Pipeline`; NFR-7's loss counters do not apply to it (it has its own `beacon` stats key instead: snapshots/lsof_errors/new_sightings/findings).
 - gene payloads are chunked across multiple tx per CON-9/FR-R-9 whenever they exceed the ~900B post-overhead budget; ledger-client owns the chunking orchestration, ledger-program's commit_gene accepts either a single write or a sequence of appends into the same fixed-size (4096B) Genome Registry PDA.
+- allele_search.rs's allele->action mapping and cost table are invented (overview.md specifies no allele physics, FR-R-6 real alleles are unimplemented); the search is fitness-based (containment_value - stability_cost, including a benign-action collision penalty), not gated on full containment, so it can legally return the empty sequence — see plan.md's note on that item.
 </content>
