@@ -17,7 +17,7 @@ crates/
   mesh/           identity.rs, transport.rs, message.rs, verify.rs, revocation.rs
   trace-capture/  main.rs
 frontend/         electron/{main,preload,backend}.cjs, src/{data,main,mesh,helix,genome}.js
-advisor-service/  schema.sql (Postgres DDL; server not yet built, Phase 10)
+advisor-service/  schema.sql (Postgres DDL), server.js (POST /v1/incident: auth -> Spaces -> Postgres -> Gemma), test.js
 spikes/           spike1_eslogger.sh, spike1_trigger.c, spike2_libp2p_pair.rs, spike3_art_capture.md
                   out/ (gitignored raw captures)
 ```
@@ -69,6 +69,7 @@ spikes/           spike1_eslogger.sh, spike1_trigger.c, spike2_libp2p_pair.rs, s
 - `startBackend(opts)` -> four `spawn`ed children via a shared `spawnLineReader` helper (readline over stdout, NDJSON parse, auto-restart on unexpected exit): `scout` (default `--libproc`, NFR-3 no-root; `TCELL_SCOUT_MODE=eslogger` wraps in best-effort `sudo -n`), `meshd` (stdin kept open for `sendMeshCommand`), ledger-client's `feed` example -- each bridged onto a plain `EventEmitter` (`'scout'|'mesh'|'ledger'`)
 - `WakeRelay` -> binds the canonical wake socket itself (the address given to `scout --wake-socket`; Scout is the client, per trigger.rs's own doc); FIFO-queues incoming `WakeSignal`s (`'wake'` event), serially spawns one ephemeral-socket Soldier per queued wake via `_deliverToFreshSoldier` -- readiness detected by matching soldier main.rs's own pre-existing stderr line `"dormant, waiting on"` (unmodified Rust side, no new marker), then connects as a client exactly like Scout's own `send_wake` (one JSON line, drop); captures Soldier's one `cure` stdout line as `'soldier'`, unlinks the ephemeral socket on child exit
 - `runTestThreat()` -> `scripts/test_threat.sh` (Phase 9 item 8), fire-and-forget
+- `makeAdvisorRelay` (Phase 10) -> scout records (`progress` buffered per `root_exe`, `detection` triggers POST) -> advisor-service over HTTPS, signed with meshd's identity key file (read directly, no meshd IPC); emits `'advisor'`; no Rust linkage
 - wired into main.cjs/preload.cjs now, real (Phase 9 item 10): `main.cjs` calls `startBackend()` in `app.whenReady()`, forwards every backend event over one generic `tcell:event` IPC channel (`{channel,payload}`) to all windows, exposes `ipcMain.handle('tcell:mesh-command'|'tcell:run-test-threat', ...)`; `preload.cjs` exposes `window.tcell.{onEvent,sendMeshCommand,runTestThreat}` (plus the pre-existing `openGenome`) to both windows (shared preload script)
 
 ## Frontend live translator (frontend/src/data.js, Phase 9 item 11, A -> B means A calls/uses B)
