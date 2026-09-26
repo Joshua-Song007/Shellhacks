@@ -137,6 +137,7 @@ export function createHelix(canvas, { hashes, capacity = 160, tilt = 0, bg = nul
   const euler = new THREE.Euler();
 
   new ResizeObserver(() => {
+    if (!box.clientWidth || !box.clientHeight) return; // hidden view: a 0 size would NaN the camera for good
     w = box.clientWidth;
     h = box.clientHeight;
     renderer.setSize(w, h, false);

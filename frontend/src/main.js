@@ -1,5 +1,5 @@
 import gsap from 'gsap';
-import { feed, state } from './data.js';
+import { feed, state, inject, suppress, ALLELES, evaluate } from './data.js';
 import { createHelix } from './helix.js';
 import { createMesh, LABEL } from './mesh.js';
 
@@ -63,7 +63,7 @@ const COPY = {
   clean: () => ["Everything's safe", 'T-Cell is watching every device on your home network. Nothing needs your attention.'],
   watching: (d) => [`Checking something on ${d}`, 'A program is acting unusually. T-Cell is keeping a close eye on it. You don’t need to do anything.'],
   isolated: (d, t) => [`Threat paused on ${d}`, `Something that behaves like ${t.toLowerCase()} tried to run. T-Cell froze it before it could do damage and is building a cure.`],
-  cured: (d) => ['Fixed. Your devices are immune.', `The cure found on ${d} was shared with your other devices, so this threat can’t hurt them.`],
+  cured: (d, t, tti) => ['Fixed. Your devices are immune.', `Found, frozen and fixed in ${tti} seconds. The cure found on ${d} was shared with your other devices, so this threat can’t hurt them.`],
 };
 let phase = 'clean';
 function renderHealth() {
@@ -73,7 +73,8 @@ function renderHealth() {
     segs[i].t.textContent = `${d.name}: ${LABEL[d.status]}`;
   });
   const inc = state.incident;
-  const [title, sub] = COPY[phase](inc ? nameOf(inc.device) : '', inc?.threat ?? '');
+  const tti = inc?.marks.immune ? ((inc.marks.immune - inc.t0) / 1000).toFixed(1) : '';
+  const [title, sub] = COPY[phase](inc ? nameOf(inc.device) : '', inc?.threat ?? '', tti);
   const h = $('#health-title');
   if (h.textContent !== title) {
     h.textContent = title;
@@ -83,7 +84,7 @@ function renderHealth() {
   $('.health').dataset.s = phase;
   $('#f-safe').textContent = `${safe} of ${state.devices.length}`;
   $('#f-stopped').textContent = state.stoppedThisWeek;
-  $('#f-cures').textContent = state.genes.length;
+  $('#f-cures').textContent = state.genes.filter((g) => !g.suppressed).length;
   $('#live-text').textContent = phase === 'clean' ? `Protecting ${state.devices.length} devices` : LABEL[phase === 'cured' ? 'cured' : phase];
   document.body.dataset.alert = phase;
 }
@@ -124,9 +125,9 @@ function renderContrib() {
   $('#contrib-list').innerHTML = list.length
     ? list
         .map(
-          (b) => `<li class="${b.kind === 'commit_gene' ? 'is-cure' : 'is-report'}">
+          (b) => `<li class="${{ commit_gene: 'is-cure', suppress_gene: 'is-off' }[b.kind] ?? 'is-report'}">
             <span class="c-icon" aria-hidden="true"></span>
-            <div><strong>${b.kind === 'commit_gene' ? 'Shared a cure' : 'Reported a new threat'}</strong>
+            <div><strong>${{ commit_gene: 'Shared a cure', suppress_gene: 'Turned off a cure' }[b.kind] ?? 'Reported a new threat'}</strong>
             <span>${esc(b.name ?? 'Unknown threat')}</span></div>
             <div class="c-meta"><span>Block ${fmt(b.slot)}</span><time data-t="${b.time}">${ago(b.time)}</time></div>
           </li>`,
@@ -193,16 +194,6 @@ function renderStats() {
   spark('#sp-mem', state.history.mem, 100);
   spark('#sp-eps', state.history.eps);
 
-  $('#lineages').innerHTML = state.lineages.length
-    ? state.lineages
-        .map(
-          (l) => `<li><div><code>${l.pid}</code><span>${esc(l.exe)}</span></div>
-          <div class="bar-track"><i style="--p:${Math.min(1, l.score / 100)}"></i></div><b>${l.score}</b>
-          <p>${l.actions.join(' → ') || 'no Stage-1 actions yet'}</p></li>`,
-        )
-        .join('')
-    : '<li class="empty">No lineage above 0. Scout is idle.</li>';
-
   $('#peers').innerHTML = state.devices
     .map((d) => `<tr><td>${esc(d.name)}${d.id === state.self ? ' <em>self</em>' : ''}</td><td><code>${short(d.pubkey)}</code></td><td><span class="st" data-s="${d.status}">${d.status}</span></td><td>${((Date.now() - d.heartbeat) / 1000).toFixed(1)}s</td></tr>`)
     .join('');
@@ -215,6 +206,96 @@ function renderLedger() {
     .map((b) => `<tr class="${b.mine ? 'mine' : ''}"><td>${fmt(b.slot)}</td><td><span class="ix ix-${b.kind}">${b.kind}</span></td><td><code>${short(b.threat)}</code></td><td><code>${short(b.gene)}</code></td><td><code>${short(b.sig)}</code></td></tr>`)
     .join('');
 }
+
+// ---------- Threat response: time to immunity, lineage tree, allele search, suppress ----------
+const STEPS = [['detect', 'Frozen'], ['gene', 'Cure evolved'], ['regress', 'Apps checked'], ['commit', 'On chain'], ['immune', 'Home immune']];
+const ACT_LABEL = { ExecFromTempOrCache: 'Ran from a temp folder', RecoverySnapshotTamper: 'Deleted backups', RapidFileModBurst: 'Mass file rewrite' };
+const base = (p) => p.split('/').pop();
+const sign = (n) => (n >= 0 ? `+${n}` : `${n}`);
+const alleleNames = (mask) => ALLELES.filter((_, i) => mask & (1 << i)).map((a) => a.label);
+const watchText = (ms) => `${String(Math.floor(ms / 60000)).padStart(2, '0')}:${((ms / 1000) % 60).toFixed(2).padStart(5, '0')}`;
+
+let watchRaf = 0;
+function tick() {
+  const inc = state.incident;
+  $('#watch').textContent = watchText((inc.marks.immune ?? Date.now()) - inc.t0);
+  if (!inc.marks.immune) watchRaf = requestAnimationFrame(tick);
+}
+
+const node = (id, title, sub, cls = '') => `<button class="node ${cls}" data-node="${id}"><span>${esc(title)}</span><small>${sub}</small></button>`;
+function renderIncident() {
+  const inc = state.incident;
+  $('#inject').disabled = !!inc && !inc.done;
+  if (!inc) {
+    $('#inc-body').innerHTML = '<p class="empty">No threats yet. Scout is watching every process on this network. Run a test threat to see the full response.</p>';
+    return;
+  }
+  cancelAnimationFrame(watchRaf);
+  tick();
+  $('.inc').dataset.live = inc.marks.immune ? 'done' : 'on';
+  $('#tti').innerHTML = STEPS.map(([k, label]) => `<li class="${inc.marks[k] ? 'on' : ''}"><span>${label}</span><b>${inc.marks[k] ? `+${((inc.marks[k] - inc.t0) / 1000).toFixed(2)}s` : '—'}</b></li>`).join('');
+
+  const { parent: p, child: c, acts } = inc.tree;
+  const tree = `<div class="tree">
+    ${node('parent', base(p.exe), `pid ${p.pid}`)}<i class="edge"></i>
+    ${node('child', base(c.exe), `pid ${c.pid}, score ${inc.score}/100`, 'is-threat')}<i class="edge"></i>
+    <ul class="acts">${acts.map((a, i) => `<li>${node(i, ACT_LABEL[a.action], `+${a.weight} ${a.attack}`, 'is-act')}</li>`).join('')}${acts.length < 3 ? '<li class="wait">watching…</li>' : ''}</ul>
+  </div>`;
+
+  const S = inc.search;
+  let search = '<p class="al-sum">The cure search starts once the threat is frozen.</p>';
+  if (S) {
+    const searching = !inc.gene;
+    const cls = (m, r) => {
+      if (m >= S.tested) return m & (1 << r) ? 'c b' : 'c';
+      const st = m === S.best ? 'best' : searching && m === S.tested - 1 ? 'cur' : 'no';
+      return `c ${m & (1 << r) ? 'b' : ''} ${st}`;
+    };
+    const e = evaluate(S.best, inc.actions);
+    search = `<div class="alleles" role="img" aria-label="Allele combinations tested: ${S.tested} of 32">
+      ${ALLELES.map((a, r) => `<span class="al-name">${a.label}<em>${a.cost}</em></span>${Array.from({ length: 32 }, (_, m) => `<i class="${cls(m, r)}"></i>`).join('')}`).join('')}
+    </div>
+    <p class="al-sum">${searching ? `Testing ${S.tested} of 32 combinations. Best so far: ` : 'Winner: '}<b>${alleleNames(S.best).join(' + ') || 'none'}</b>, fitness ${sign(e.fitness)} (stops ${e.containment} pts, costs ${e.cost})${inc.gene ? `, gene <code>${short(inc.gene)}</code>` : ''}</p>`;
+  }
+
+  let foot = '';
+  if (inc.suppress?.done) foot = '<p class="sup-done">Cure turned off on every device. Epigenetic_Status is now suppressed, so no node will run it.</p>';
+  else if (inc.suppress) foot = `<p class="sup-wait">Turning off the cure: ${inc.suppress.sigs} of 3 signatures</p>`;
+  else if (inc.marks.commit) foot = '<button class="btn-ghost" id="suppress">Turn off this cure</button><p>Use this if the cure breaks a legitimate app. It needs 3 of 5 signatures.</p>';
+
+  $('#inc-body').innerHTML = `${tree}<h3>Cure search</h3>${search}<div class="inc-foot">${foot}</div>`;
+  if (inspecting && inspecting.inc !== inc) closeInspect();
+}
+
+let inspecting = null;
+function closeInspect() {
+  inspecting = null;
+  $('#inspect').hidden = true;
+}
+$('#inspect-x').addEventListener('click', closeInspect);
+$('#inject').addEventListener('click', inject);
+$('#inc-body').addEventListener('click', (e) => {
+  if (e.target.closest('#suppress')) return suppress();
+  const b = e.target.closest('[data-node]');
+  if (!b) return;
+  const inc = state.incident;
+  const id = b.dataset.node;
+  const n = id === 'parent' ? inc.tree.parent : id === 'child' ? inc.tree.child : inc.tree.acts[+id];
+  let title, note;
+  if (id === 'parent') [title, note] = [base(n.exe), 'Parent process. It started the flagged program, but its own behaviour scored nothing.'];
+  else if (id === 'child') [title, note] = [base(n.exe), 'Root of the flagged lineage. Everything it and its children do adds to one score, and Scout freezes it (SIGSTOP) at 100.'];
+  else {
+    const stops = inc.gene ? alleleNames(inc.search.best).filter((l) => ALLELES.find((a) => a.label === l).stops.includes(n.action)) : [];
+    title = `${n.action} (+${n.weight}, ${n.attack})`;
+    note = inc.gene ? `Neutralised by: ${stops.join(', ') || 'nothing in the winning cure'}.` : 'Waiting for the cure search to pick alleles.';
+  }
+  inspecting = { inc };
+  $('#inspect-title').textContent = title;
+  $('#inspect-note').textContent = note;
+  $('#inspect-json').textContent = JSON.stringify(n.tes, null, 2).replace(/"(ts_ns|recv_ns)": "(\d+)"/g, '"$1": $2');
+  $('#inspect').hidden = false;
+});
+addEventListener('keydown', (e) => e.key === 'Escape' && closeInspect());
 
 // ---------- Wiring ----------
 feed.addEventListener('devices', () => {
@@ -233,11 +314,17 @@ feed.addEventListener('genes', () => {
 feed.addEventListener('block', ({ detail }) => {
   if (detail.mine) renderContrib();
   renderLedger();
+renderIncident();
 });
 feed.addEventListener('stats', renderStats);
+feed.addEventListener('threat', () => {
+  renderIncident();
+  renderHealth();
+});
 setInterval(() => document.querySelectorAll('time[data-t]').forEach((t) => (t.textContent = ago(+t.dataset.t))), 5000);
 
 renderHealth();
 renderContrib();
 renderStats();
 renderLedger();
+renderIncident();

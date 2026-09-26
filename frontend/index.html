@@ -113,9 +113,19 @@
         </dl>
       </section>
 
-      <section class="panel lin" aria-labelledby="lin-title">
-        <h2 id="lin-title">Watched lineages</h2>
-        <ol id="lineages" class="lineages"></ol>
+      <section class="panel inc" aria-labelledby="inc-title">
+        <header class="inc-head">
+          <h2 id="inc-title">Threat response</h2>
+          <strong class="watch" id="watch" aria-label="Time to immunity">00:00.00</strong>
+          <button class="btn btn-sm" id="inject">Run test threat</button>
+        </header>
+        <ol class="tti" id="tti"></ol>
+        <div class="inc-body" id="inc-body"></div>
+        <div class="inspect" id="inspect" hidden>
+          <header><strong id="inspect-title"></strong><button class="inspect-x" id="inspect-x" aria-label="Close">×</button></header>
+          <p id="inspect-note"></p>
+          <pre id="inspect-json"></pre>
+        </div>
       </section>
 
       <section class="panel peers" aria-labelledby="peers-title">
