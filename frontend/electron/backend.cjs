@@ -30,6 +30,7 @@
 
 const { spawn } = require('node:child_process');
 const net = require('node:net');
+const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -58,6 +59,64 @@ function defaultConfig() {
     meshState: path.join(TCELL_HOME, 'mesh_state.json'),
     meshPort: process.env.TCELL_MESH_PORT ? Number(process.env.TCELL_MESH_PORT) : 0,
     wakeSocketPath: path.join(os.tmpdir(), 'tcell-wake.sock'),
+    advisorUrl: process.env.TCELL_ADVISOR_URL || null, // null -> advisor relay off
+  };
+}
+
+// Phase 10 advisor relay: on each Scout detection, POST the incident plus
+// its raw progress/detection records to advisor-service, signed with this
+// device's mesh identity key. Fails open -- any error is just an 'error'
+// event, the detection/cure path never waits on it.
+const ADVISOR_TIMEOUT_MS = 30000;
+const MAX_BUFFERED_PROGRESS = 64;
+
+function makeAdvisorRelay(events, cfg) {
+  const progressByRoot = new Map();
+
+  // libp2p protobuf Ed25519 keypair (identity.rs): last 64 bytes = seed || public.
+  function loadKey() {
+    const b = fs.readFileSync(cfg.meshIdentity);
+    const seed = b.subarray(b.length - 64, b.length - 32);
+    const pub = b.subarray(b.length - 32);
+    const key = crypto.createPrivateKey({ key: { kty: 'OKP', crv: 'Ed25519', d: seed.toString('base64url'), x: pub.toString('base64url') }, format: 'jwk' });
+    return { key, pubHex: pub.toString('hex') };
+  }
+
+  async function post(record) {
+    const d = record.detection;
+    const raw = [...(progressByRoot.get(d.root_exe) || []), record];
+    progressByRoot.delete(d.root_exe);
+    const incident = {
+      threat_id: d.wake.threat_id,
+      ts_ns: d.trigger_ts_ns,
+      score: d.score,
+      actions: d.wake.schema,
+      attack_ids: d.attack_ids,
+      latency_ns: d.latency_ns,
+    };
+    const body = Buffer.from(JSON.stringify({ sent_ms: Date.now(), incident, raw }));
+    const { key, pubHex } = loadKey();
+    const res = await fetch(new URL('/v1/incident', cfg.advisorUrl), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-tcell-pubkey': pubHex, 'x-tcell-sig': crypto.sign(null, body, key).toString('hex') },
+      body,
+      signal: AbortSignal.timeout(ADVISOR_TIMEOUT_MS),
+    });
+    if (!res.ok) throw new Error(`advisor HTTP ${res.status}`);
+    const { narration, trend } = await res.json();
+    events.emit('advisor', { threat_id: incident.threat_id, narration, trend });
+  }
+
+  return function onScout(record) {
+    if (!cfg.advisorUrl) return;
+    if (record.type === 'progress') {
+      const root = record.progress.root_exe;
+      const list = progressByRoot.get(root) || [];
+      if (list.length < MAX_BUFFERED_PROGRESS) list.push(record);
+      progressByRoot.set(root, list);
+    } else if (record.type === 'detection') {
+      post(record).catch((e) => events.emit('error', { source: 'advisor', message: e.message }));
+    }
   };
 }
 
@@ -229,12 +288,16 @@ function startBackend(overrides = {}) {
   const cfg = { ...defaultConfig(), ...overrides };
   const events = new EventEmitter();
 
+  const advisor = makeAdvisorRelay(events, cfg);
   const scoutCmd = scoutSpawn(cfg);
   const scout = spawnLineReader(events, 'scout', scoutCmd.cmd, scoutCmd.args, {
     restart: true,
     onLine: (line) => {
       const record = tryParseJson(line);
-      if (record) events.emit('scout', record);
+      if (record) {
+        events.emit('scout', record);
+        advisor(record);
+      }
     },
   });
 
