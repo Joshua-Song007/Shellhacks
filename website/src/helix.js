@@ -134,6 +134,212 @@ export function createHelix(canvas, { reduced = false, onHover = () => {} } = {}
   );
   scene.add(particles);
 
+  // Viruses: a hexagon with a spike at each corner, drawn once to a texture. Each one drifts,
+  // turns green as the immune system kills it, pops out, and respawns somewhere else.
+  const vCanvas = document.createElement('canvas');
+  vCanvas.width = vCanvas.height = 128;
+  const vx = vCanvas.getContext('2d');
+  vx.translate(64, 64);
+  vx.strokeStyle = vx.fillStyle = '#fff';
+  vx.lineCap = vx.lineJoin = 'round';
+  vx.lineWidth = 8;
+  const corner = (k, r) => [Math.cos((k / 6) * Math.PI * 2) * r, Math.sin((k / 6) * Math.PI * 2) * r];
+  vx.beginPath();
+  for (let k = 0; k < 6; k++) vx.lineTo(...corner(k, 30));
+  vx.closePath();
+  vx.stroke();
+  for (let k = 0; k < 6; k++) {
+    vx.beginPath();
+    vx.moveTo(...corner(k, 30));
+    vx.lineTo(...corner(k, 48));
+    vx.stroke();
+    vx.beginPath();
+    vx.arc(...corner(k, 52), 7, 0, Math.PI * 2);
+    vx.fill();
+  }
+
+  const V = mobile ? 8 : 18;
+  const VIRUS_LIFE = [7, 13]; // seconds from appearing to death
+  const VIRUS_SLEEP = [3, 10]; // seconds hidden before the next one appears
+  const vPos = new Float32Array(V * 3);
+  const vSeed = new Float32Array(V * 2); // [spin phase, spin speed]
+  const vSize = new Float32Array(V);
+  const vKill = new Float32Array(V); // 0 = red/alive, 1 = green/killed
+  const vAlpha = new Float32Array(V);
+  const vGrow = new Float32Array(V);
+  const vVel = new Float32Array(V * 3);
+  const vAge = new Float32Array(V);
+  const vLife = new Float32Array(V);
+  function spawnVirus(i, age = 0) {
+    vPos[i * 3] = (Math.random() - 0.5) * 34;
+    vPos[i * 3 + 1] = (Math.random() - 0.5) * 22;
+    vPos[i * 3 + 2] = (Math.random() - 0.5) * 18 - 3;
+    const a = Math.random() * Math.PI * 2;
+    const sp = 0.35 + Math.random() * 0.45; // world units / s
+    vVel[i * 3] = Math.cos(a) * sp;
+    vVel[i * 3 + 1] = Math.sin(a) * sp;
+    vVel[i * 3 + 2] = (Math.random() - 0.5) * 0.3;
+    vSeed[i * 2] = Math.random() * Math.PI * 2;
+    vSeed[i * 2 + 1] = (Math.random() < 0.5 ? -1 : 1) * (0.3 + Math.random() * 0.6);
+    vSize[i] = 0.26 + Math.random() * 0.2;
+    vLife[i] = VIRUS_LIFE[0] + Math.random() * (VIRUS_LIFE[1] - VIRUS_LIFE[0]);
+    vAge[i] = age;
+  }
+  const sleep = () => -(VIRUS_SLEEP[0] + Math.random() * (VIRUS_SLEEP[1] - VIRUS_SLEEP[0])); // negative age = not yet visible
+  for (let i = 0; i < V; i++) spawnVirus(i, VIRUS_LIFE[0] * (Math.random() * 1.6 - 0.6)); // staggered so they don't die in sync
+  const vGeo = new THREE.BufferGeometry();
+  vGeo.setAttribute('position', new THREE.BufferAttribute(vPos, 3));
+  vGeo.setAttribute('aSeed', new THREE.BufferAttribute(vSeed, 2));
+  vGeo.setAttribute('aSize', new THREE.BufferAttribute(vSize, 1));
+  vGeo.setAttribute('aKill', new THREE.BufferAttribute(vKill, 1));
+  vGeo.setAttribute('aAlpha', new THREE.BufferAttribute(vAlpha, 1));
+  vGeo.setAttribute('aGrow', new THREE.BufferAttribute(vGrow, 1));
+  const vUniforms = {
+    uMap: { value: new THREE.CanvasTexture(vCanvas) },
+    uColor: { value: new THREE.Color('#b0263f') },
+    uKilled: { value: new THREE.Color('#47ff9a') },
+    uTime: { value: 0 },
+    uScale: { value: 1 }, // pixels per world unit at distance 1; set in resize()
+  };
+  const viruses = new THREE.Points(
+    vGeo,
+    new THREE.ShaderMaterial({
+      uniforms: vUniforms,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      vertexShader: /* glsl */ `
+        attribute vec2 aSeed;
+        attribute float aSize;
+        attribute float aKill;
+        attribute float aAlpha;
+        attribute float aGrow;
+        uniform float uTime;
+        uniform float uScale;
+        varying float vAngle;
+        varying float vFade;
+        varying float vKill;
+        void main() {
+          vec4 mv = modelViewMatrix * vec4(position, 1.0);
+          float dist = -mv.z;
+          vAngle = aSeed.x + uTime * aSeed.y;
+          vKill = aKill;
+          vFade = aAlpha * smoothstep(0.6, 2.5, dist) * (1.0 - smoothstep(10.0, 24.0, dist)); // hide when clipping the lens or lost in fog
+          gl_PointSize = min(aSize * aGrow * uScale / dist, 160.0);
+          gl_Position = projectionMatrix * mv;
+        }`,
+      fragmentShader: /* glsl */ `
+        uniform sampler2D uMap;
+        uniform vec3 uColor;
+        uniform vec3 uKilled;
+        varying float vAngle;
+        varying float vFade;
+        varying float vKill;
+        void main() {
+          vec2 p = gl_PointCoord - 0.5;
+          float c = cos(vAngle), s = sin(vAngle);
+          float a = texture2D(uMap, vec2(c * p.x - s * p.y, s * p.x + c * p.y) + 0.5).a;
+          gl_FragColor = vec4(mix(uColor, uKilled, vKill) * a * (0.85 + vKill * 0.4) * vFade, 1.0);
+        }`,
+    }),
+  );
+  viruses.frustumCulled = false;
+  scene.add(viruses);
+
+  // Burst: a killed virus scatters into dots that match the background field.
+  const BURST = 16;
+  const bPos = new Float32Array(V * BURST * 3);
+  const bVel = new Float32Array(V * BURST * 3);
+  const bAge = new Float32Array(V * BURST).fill(99);
+  const bLife = new Float32Array(V * BURST).fill(1);
+  const bAlpha = new Float32Array(V * BURST);
+  const bGeo = new THREE.BufferGeometry();
+  bGeo.setAttribute('position', new THREE.BufferAttribute(bPos, 3));
+  bGeo.setAttribute('aAlpha', new THREE.BufferAttribute(bAlpha, 1));
+  const bursts = new THREE.Points(
+    bGeo,
+    new THREE.ShaderMaterial({
+      uniforms: { uColor: { value: new THREE.Color(0x7fb6ff) }, uScale: vUniforms.uScale },
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      vertexShader: /* glsl */ `
+        attribute float aAlpha;
+        uniform float uScale;
+        varying float vAlpha;
+        void main() {
+          vec4 mv = modelViewMatrix * vec4(position, 1.0);
+          vAlpha = aAlpha;
+          gl_PointSize = max(0.05 * uScale / -mv.z, 1.5);
+          gl_Position = projectionMatrix * mv;
+        }`,
+      fragmentShader: /* glsl */ `
+        uniform vec3 uColor;
+        varying float vAlpha;
+        void main() {
+          float a = 1.0 - smoothstep(0.25, 0.5, length(gl_PointCoord - 0.5));
+          gl_FragColor = vec4(uColor * a * vAlpha, 1.0);
+        }`,
+    }),
+  );
+  bursts.frustumCulled = false;
+  scene.add(bursts);
+
+  function burst(i) {
+    for (let j = 0; j < BURST; j++) {
+      const n = i * BURST + j;
+      // random direction on a sphere
+      const u = Math.random() * 2 - 1;
+      const th = Math.random() * Math.PI * 2;
+      const r = Math.sqrt(1 - u * u);
+      const sp = 0.8 + Math.random() * 1.6;
+      for (let k = 0; k < 3; k++) bPos[n * 3 + k] = vPos[i * 3 + k];
+      bVel[n * 3] = r * Math.cos(th) * sp;
+      bVel[n * 3 + 1] = r * Math.sin(th) * sp;
+      bVel[n * 3 + 2] = u * sp;
+      bAge[n] = 0;
+      bLife[n] = 1.4 + Math.random() * 1.4;
+    }
+  }
+
+  // Per-frame virus lifecycle: fade in, drift, turn green, pop, respawn.
+  function stepViruses(dt) {
+    for (let i = 0; i < V; i++) {
+      const before = vLife[i] - vAge[i];
+      vAge[i] += dt;
+      const left = vLife[i] - vAge[i];
+      if (left <= 0) {
+        spawnVirus(i, sleep());
+        vAlpha[i] = 0;
+        continue;
+      }
+      if (before > 0.25 && left <= 0.25) burst(i);
+      for (let k = 0; k < 3; k++) vPos[i * 3 + k] += vVel[i * 3 + k] * dt * (left < 2.2 ? 0.25 : 1); // slows as it's caught
+      const kill = clamp01((2.2 - left) / 0.5); // turns green over 0.5s, holds green…
+      const pop = clamp01((0.25 - left) / 0.25); // …then shrinks away as it bursts
+      vKill[i] = kill;
+      vAlpha[i] = clamp01(vAge[i] / 0.8) * (1 - pop);
+      vGrow[i] = 1 - pop * 0.6;
+    }
+    for (const n of ['position', 'aKill', 'aAlpha', 'aGrow']) vGeo.attributes[n].needsUpdate = true;
+
+    const drag = Math.exp(-dt * 2.2); // shards coast to a stop like the drifting field
+    for (let n = 0; n < V * BURST; n++) {
+      if (bAge[n] >= bLife[n]) {
+        bAlpha[n] = 0;
+        continue;
+      }
+      bAge[n] += dt;
+      for (let k = 0; k < 3; k++) {
+        bPos[n * 3 + k] += bVel[n * 3 + k] * dt;
+        bVel[n * 3 + k] *= drag;
+      }
+      const p = bAge[n] / bLife[n];
+      bAlpha[n] = 0.75 * Math.min(1, p * 12) * (1 - p * p);
+    }
+    bGeo.attributes.position.needsUpdate = bGeo.attributes.aAlpha.needsUpdate = true;
+  }
+
   // Post
   const composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
@@ -161,6 +367,7 @@ export function createHelix(canvas, { reduced = false, onHover = () => {} } = {}
   const col = new THREE.Color();
   const euler = new THREE.Euler();
 
+  const tmp2 = new THREE.Vector2();
   function resize() {
     const w = innerWidth;
     const h = innerHeight;
@@ -169,6 +376,7 @@ export function createHelix(canvas, { reduced = false, onHover = () => {} } = {}
     bloom.setSize(w, h);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
+    vUniforms.uScale.value = renderer.getDrawingBufferSize(tmp2).y / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
   }
   resize();
   addEventListener('resize', resize);
@@ -299,6 +507,10 @@ export function createHelix(canvas, { reduced = false, onHover = () => {} } = {}
 
     particles.rotation.y = t * 0.012;
     particles.position.y = Math.sin(t * 0.2) * 0.2;
+    viruses.rotation.y = bursts.rotation.y = particles.rotation.y;
+    viruses.position.y = bursts.position.y = particles.position.y;
+    vUniforms.uTime.value = t;
+    stepViruses(reduced ? dt * 0.3 : dt);
 
     // Report hover to the DOM probe
     if (hover >= 0 && mix[hover] > 0.6) {
