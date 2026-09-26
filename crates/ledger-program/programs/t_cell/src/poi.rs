@@ -12,11 +12,11 @@ use crate::error::TCellError;
 pub const POI_THRESHOLD: usize = 3;
 
 pub const POI_COMMITTEE: [Pubkey; 5] = [
-    pubkey!("5u3UbmRDU3jbsyifKdDhug98VF9Gwsr5FYXTxBDbDbNg"),
-    pubkey!("6P25LCHUcXFHnAfiVKsYY6ass7QfBqgMcNHt8FoM9Pds"),
-    pubkey!("82ceHp6rX8JbAf7iQofEQddRwnT7wL5wkfpkoAYcy25s"),
-    pubkey!("4sJmBoBfHaL7vVVv99vMmHFa1YRAdLCCAv23QdSMCmhe"),
-    pubkey!("Fpj1z9rk724HuRfrsR9pnvnjKtUqMoFKqMFPhBhU7Xz2"),
+    pubkey!("DuUqFL3imPUxFESsaB7gKKKR9n65NWbWvDKmRdFUkPMX"),
+    pubkey!("AYGKu1ypUQBjtPevHUS5PztNz57Qm2wZsGtiAhVk17ek"),
+    pubkey!("AuoRudix57E3V1ZcvnqcC2tmQUTxLc4BpqjY1oeEnKU7"),
+    pubkey!("8DPZvDNCkh9kgjxdMXghqkUKJ6bgqatyv144V3YfRDTA"),
+    pubkey!("GTK9bPW447GNRYwpqrWppX37v22JQY8PcEwpqHPFeTfz"),
 ];
 
 /// Pure: counts distinct POI_COMMITTEE members among the 5 candidate

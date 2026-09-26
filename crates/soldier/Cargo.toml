@@ -12,3 +12,6 @@ serde_json = "1.0.151"
 wasmi = "0.32"
 wat = "1"
 sha2 = "0.11.0"
+ledger-client = { path = "../ledger-client" }
+solana-keypair = "3.1.2"
+solana-commitment-config = "3"

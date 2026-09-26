@@ -10,4 +10,6 @@ pub enum TCellError {
     TooManyReporters,
     #[msg("gene_seq chunk would exceed the fixed Genome Registry space")]
     GeneTooLarge,
+    #[msg("this threat_id already has a finalized gene; gene_seq is append-only")]
+    GeneAlreadyCommitted,
 }

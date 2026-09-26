@@ -13,7 +13,7 @@ crates/
   ledger-program/ Anchor.toml, keys/ (gitignored, 5 devnet PoI keypairs), programs/t_cell/
                   src/{constants.rs, error.rs, state.rs, poi.rs, instructions.rs, instructions/{submit_threat.rs, commit_gene.rs, suppress_gene.rs}, lib.rs}
                   tests/test_instructions.rs (litesvm, no local-validator/Node dependency)
-  ledger-client/  lib.rs, client.rs, examples/devnet_smoke.rs (manual verification, not run in CI), tests/integration.rs (#[ignore]'d, needs a local solana-test-validator)
+  ledger-client/  lib.rs, client.rs, examples/devnet_smoke.rs (manual verification, not run in CI), examples/suppress.rs (AC-5 demo kill-switch CLI), tests/integration.rs (#[ignore]'d, needs a local solana-test-validator)
   mesh/           identity.rs, transport.rs, message.rs, verify.rs, revocation.rs
   trace-capture/  main.rs
 dashboard/        App.tsx, TelemetryView.tsx, LedgerFeed.tsx, MyDevices.tsx
@@ -37,7 +37,7 @@ spikes/           spike1_eslogger.sh, spike1_trigger.c, spike2_libp2p_pair.rs, s
 - replay_target -> scout::scoring::{Action, exec_actions, BURST_WINDOW_NS, BURST_OPS} (pure/stateless helpers only, not Scorer/lineage), tes::schema::{TesEvent, Event}; implements allele_search::ContainmentTarget
 - gene_compile -> allele_search::{Allele, ALL} (bitmask encoding), sandbox::{Sandbox, SandboxError} (apply = instantiate); own sha2/wat deps; no tes/scout dependency
 - lib.rs -> trigger, sandbox, allele_search, replay_target, gene_compile (module declarations only)
-- main.rs (binary entrypoint, not part of lib.rs) -> trigger, replay_target, allele_search, gene_compile
+- main.rs (binary entrypoint, not part of lib.rs) -> trigger, replay_target, allele_search, gene_compile, ledger_client::LedgerClient (submit_threat, fetch_genome_registry for the FR-L-7 check, commit_gene); lib.rs modules stay ledger-free, only the binary touches the chain
 
 ## Ledger program internals (A -> B means A calls/uses B)
 - constants.rs -> anchor-lang only (SEED bytes, MAX_REPORTERS/MAX_GENE_BYTES caps); no other module
@@ -52,11 +52,11 @@ spikes/           spike1_eslogger.sh, spike1_trigger.c, spike2_libp2p_pair.rs, s
 ## Ledger client internals (A -> B means A calls/uses B)
 - client.rs -> t_cell::{instruction, accounts, state, ID, THREAT_SEED, GENOME_SEED, MAX_GENE_BYTES} (Anchor-generated types, reused directly rather than hand-encoded); anchor_lang::solana_program::{instruction::Instruction, system_program} (t_cell has no own solana_program re-export, goes through anchor-lang); solana_client::rpc_client::RpcClient (sync/blocking — matches the rest of this project, no async runtime anywhere yet); own MAX_CHUNK_BYTES=400 (independently declared, no dependency edge onto soldier's gene_compile.rs, which has a *different* ~900B constant for a *different* concern — compiled gene size, not tx-chunk size)
 - lib.rs -> client (module declaration + re-export only)
-- examples/devnet_smoke.rs, tests/integration.rs -> client::LedgerClient (public API only); integration.rs also directly constructs its own RpcClient for test-only airdrops (not part of LedgerClient's real surface — production clients don't fund themselves)
+- examples/devnet_smoke.rs, examples/suppress.rs, tests/integration.rs -> client::LedgerClient (public API only); integration.rs also directly constructs its own RpcClient for test-only airdrops (not part of LedgerClient's real surface — production clients don't fund themselves)
 
 ## Dependency graph (A -> B means A depends on B)
 - scout -> tes
-- soldier -> tes, scout (wake-signal contract plus a handful of scout::scoring's pure, stateless helpers — `WakeSignal`, `Action`, `exec_actions`, `BURST_WINDOW_NS`, `BURST_OPS` — never Scorer/lineage/host-detection internals)
+- soldier -> tes, scout (wake-signal contract plus a handful of scout::scoring's pure, stateless helpers — `WakeSignal`, `Action`, `exec_actions`, `BURST_WINDOW_NS`, `BURST_OPS` — never Scorer/lineage/host-detection internals), ledger-client (main.rs only: FR-L-7 check + stage-4 commit; user-approved 2026-09-26)
 - ledger-program -> (none internal; standalone Anchor program)
 - ledger-client -> t_cell (path dependency on `crates/ledger-program/programs/t_cell`, `cpi` feature — a concrete cross-workspace dependency, not just an abstract "account layout/IDL" note; reuses t_cell's Anchor-generated instruction/accounts/state types directly rather than hand-encoding Borsh)
 - mesh -> tes (DATA-3 payload), ledger-client (async chain lookup)

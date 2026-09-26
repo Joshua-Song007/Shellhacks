@@ -6228,10 +6228,13 @@ dependencies = [
 name = "soldier"
 version = "0.1.0"
 dependencies = [
+ "ledger-client",
  "scout",
  "serde",
  "serde_json",
  "sha2 0.11.0",
+ "solana-commitment-config",
+ "solana-keypair",
  "tes",
  "wasmi",
  "wat",

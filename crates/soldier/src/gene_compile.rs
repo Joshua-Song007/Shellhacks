@@ -5,8 +5,9 @@
 //! instantiation, not any live host action -- there is no host action to
 //! take yet. Tx-chunking (CON-9) is limited to *deciding* whether the gene
 //! fits a single Solana transaction; actually submitting it is
-//! ledger-client's job (Phase 5, unbuilt) -- architecture.md's dependency
-//! graph has no soldier -> ledger-client edge.
+//! ledger-client's job -- soldier's main.rs calls `LedgerClient::commit_gene`,
+//! which does its own chunking against its own per-tx budget; this module
+//! stays ledger-free.
 
 use sha2::{Digest, Sha256};
 
@@ -64,7 +65,7 @@ pub fn hash(wasm_bytes: &[u8]) -> String {
 
 /// FR-R-9/CON-9: decides whether `wasm_bytes` needs chunked upload. Pure
 /// sizing decision -- actual transaction submission belongs to
-/// ledger-client (Phase 5, unbuilt).
+/// ledger-client, whose MAX_CHUNK_BYTES (400) governs the real split.
 pub fn chunk_plan(wasm_bytes: &[u8]) -> UploadPlan {
     if wasm_bytes.len() <= MAX_SINGLE_TX_BYTES {
         UploadPlan::Single(wasm_bytes.to_vec())

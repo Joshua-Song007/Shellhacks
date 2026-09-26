@@ -17,13 +17,16 @@
 | scout | serde_json | 1.0.151 | normal | |
 | scout | sha2 | 0.11.0 | normal | Threat_ID |
 | scout | libc | 0.2.189 | normal | `kill(SIGSTOP)`; libproc, kqueue, `proc_pid_rusage` (degraded path) |
-| soldier | scout | path | normal | wake-signal contract only (WakeSignal, Action) |
+| soldier | scout | path | normal | WakeSignal, Action + pure scoring helpers (exec_actions, BURST_WINDOW_NS, BURST_OPS) |
 | soldier | tes | path | normal | |
 | soldier | serde | 1.0.229 | normal | `derive` feature |
 | soldier | serde_json | 1.0.151 | normal | |
 | soldier | wasmi | 0.32.3 | normal | resolved from `"0.32"`; 2.0.0 is available but not requested — sandbox.rs pins the 0.32 API (Engine/Linker/Module/Store) |
 | soldier | wat | 1.259.0 | normal | gene_compile.rs compiles the winning allele sequence's WAT text to wasm at runtime; also still used by sandbox.rs's test fixtures |
 | soldier | sha2 | 0.11.0 | normal | gene_compile.rs's gene_hash (own hasher, not scout::scoring's — see architecture.md) |
+| soldier | ledger-client | path | normal | main.rs only (FR-L-7 check, submit_threat/commit_gene); pulls the Solana client crates into soldier's build |
+| soldier | solana-keypair | 3.1.2 | normal | `read_keypair_file` for --payer / --poi-key; matches ledger-client |
+| soldier | solana-commitment-config | "3" | normal | LedgerClient construction; matches ledger-client |
 | t_cell | anchor-lang | "1.1.2" -> resolved 1.2.0, `init-if-needed` feature | normal | crates/ledger-program is its own nested Anchor/Cargo workspace, NOT a root-workspace member; its own rust-toolchain.toml pins channel 1.89.0 (older than the root workspace's 1.95.0) — anchor init's own scaffold choice, not adjusted. `edition`/`rust-version` were de-inherited from `.workspace = true` to literal `"2021"`/`"1.89.0"` on 2026-09-26 (Phase 5) — inheriting broke when ledger-client path-depended on t_cell from the ROOT workspace, since Cargo resolves `.workspace = true` against whichever workspace is doing the building, not the crate's own nearest one; literal values sidestep that ambiguity entirely |
 | t_cell | litesvm | 0.10.0 | dev | in-process Rust-native test validator for tests/test_instructions.rs; no anchor-cli/local-validator/Node needed at test time, only `anchor build` once first to produce target/deploy/t_cell.so |
 | t_cell | solana-keypair/-message/-transaction/-signer | 3.1.2/3.0.1/3.0.2/3.0.0 (scaffold-pinned) | dev | test-only tx construction; solana-keypair's `read_keypair_file` loads the 5 devnet PoI keypairs under keys/ |
@@ -37,8 +40,8 @@
 
 ## Ledger program (nested Anchor workspace, `crates/ledger-program/`)
 - toolchain confirmed present: anchor-cli 1.1.2, solana-cli 3.1.10 (see Toolchain above)
-- 5 devnet-only PoI committee keypairs generated 2026-09-26 via `solana-keygen new`, stored gitignored under `crates/ledger-program/keys/poi-{1..5}.json`; their pubkeys are hardcoded into `poi.rs`'s `POI_COMMITTEE` const (see plan.md Phase 4 for why hardcoded vs. a runtime config account)
-- deployed live to devnet 2026-09-26 (Phase 5, FR-L-1): program id `27v76nMPKQg5akQHBsPHnhPt8K7kSf3s8GZjRzUnvBuq`, upgrade authority = local `solana` CLI wallet (`~/.config/solana/id.json`); verified end-to-end via `crates/ledger-client/examples/devnet_smoke.rs` (submit_threat -> commit_gene -> suppress_gene, all confirmed on-chain — AC-5)
+- 5 devnet-only PoI committee keypairs generated 2026-09-26 via `solana-keygen new`, stored gitignored under `crates/ledger-program/keys/poi-{1..5}.json`; their pubkeys are hardcoded into `poi.rs`'s `POI_COMMITTEE` const (see plan.md Phase 4 for why hardcoded vs. a runtime config account); original 5 lost from disk, REGENERATED 2026-09-26 (new pubkeys DuUq…/AYGK…/AuoR…/8DPZ…/GTK9… now in poi.rs) — the live devnet program still has the OLD committee compiled in until upgraded
+- deployed live to devnet 2026-09-26 (Phase 5, FR-L-1): program id `27v76nMPKQg5akQHBsPHnhPt8K7kSf3s8GZjRzUnvBuq`, upgrade authority = `HeAubH3AUZDwztNC3BCsDSacnGSAXnd2ZpLJ3H68W6b3` (NOT this machine's `~/.config/solana/id.json` = `Apz5x…YN56s`; authority keypair not found on this machine — likely the other engineer's wallet); verified end-to-end via `crates/ledger-client/examples/devnet_smoke.rs` (submit_threat -> commit_gene -> suppress_gene, all confirmed on-chain — AC-5)
 
 ## System tools used at runtime
 - `eslogger` (macOS 13+, root + Full Disk Access) — Scout primary source; verified on macOS 26.4.1 (SPIKE-1)

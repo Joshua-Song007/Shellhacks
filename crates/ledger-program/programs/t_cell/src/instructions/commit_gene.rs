@@ -51,6 +51,10 @@ pub fn handle_commit_gene(
     ])?;
 
     let genome = &mut ctx.accounts.genome_registry;
+    // gene_seq is append-only: once a final chunk has set gene_hash, a second
+    // commit for the same (deterministic) threat_id would append a duplicate
+    // copy and corrupt the stored gene.
+    require!(genome.gene_hash == [0u8; 32], TCellError::GeneAlreadyCommitted);
     require!(genome.gene_seq.len() + chunk.len() <= MAX_GENE_BYTES, TCellError::GeneTooLarge);
 
     if genome.threat_id == [0u8; 32] {

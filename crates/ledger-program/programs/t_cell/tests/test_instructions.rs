@@ -151,6 +151,16 @@ fn commit_gene_requires_three_of_five_committee_signers() {
     assert_eq!(genome.gene_seq, vec![1, 2, 3]);
     assert!(!genome.epigenetic_status);
 
+    // a second commit after finalization -> rejected, gene_seq untouched
+    assert!(
+        !send(&mut svm, &[&payer, &a, &b, &c, &c], instruction(&a, &b, &c, &c, &c)),
+        "re-commit of a finalized gene must be rejected"
+    );
+    let account = svm.get_account(&genome_registry).unwrap();
+    let mut data: &[u8] = &account.data;
+    let genome = t_cell::state::GenomeRegistry::try_deserialize(&mut data).unwrap();
+    assert_eq!(genome.gene_seq, vec![1, 2, 3], "no duplicate append");
+
     let _ = d;
     let _ = e;
 }
