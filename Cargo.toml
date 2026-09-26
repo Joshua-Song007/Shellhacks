@@ -1,6 +1,12 @@
 [workspace]
 resolver = "3"
 members = ["crates/tes", "crates/scout", "crates/soldier", "crates/ledger-client"]
+# t_cell (ledger-client's path dependency) resolves as an implicit workspace
+# member once path-depended-upon -- default-members keeps bare `cargo
+# build`/`test` (no -p) from also building its test target, which needs a
+# .so built into ledger-program's own separate target dir, not this one.
+# `cargo test -p t_cell` from crates/ledger-program still works normally.
+default-members = ["crates/tes", "crates/scout", "crates/soldier", "crates/ledger-client"]
 
 [workspace.package]
 edition = "2024"
