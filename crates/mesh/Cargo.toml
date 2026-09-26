@@ -1,0 +1,31 @@
+[package]
+name = "mesh"
+edition.workspace = true
+version.workspace = true
+publish.workspace = true
+
+[dependencies]
+# "ping" and `futures` are only actually used by src/bin/pairing_probe.rs
+# (test-support, spawned as a subprocess by transport.rs's test) -- they'd
+# ideally be dev-only, but Cargo bin targets never get dev-dependencies
+# (confirmed: a plain `cargo build` fails without this), so they're normal
+# deps instead. Both are lightweight and already libp2p-adjacent; the
+# library code itself (identity.rs/transport.rs) never imports either.
+libp2p = { version = "0.54", features = ["tcp", "noise", "yamux", "tokio", "macros", "ping"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "fs"] }
+rand = "0.8"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+futures = "0.3"
+ledger-client = { path = "../ledger-client" }
+
+[dev-dependencies]
+tempfile = "3"
+# tests/chain_lookup.rs only -- talks to a local solana-test-validator
+# directly (funding test accounts, building a payer/committee), the same
+# pattern ledger-client's own local-validator tests already use.
+solana-client = "3"
+solana-pubkey = "3.0.0"
+solana-commitment-config = "3"
+solana-keypair = "3.1.2"
+solana-signer = "3.0.1"
