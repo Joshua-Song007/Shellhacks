@@ -40,9 +40,9 @@
           <h1 id="health-title">Everything's safe</h1>
           <p id="health-sub">T-Cell is watching every device on your home network. Nothing needs your attention.</p>
           <dl class="facts">
-            <div><dt>Devices safe</dt><dd id="f-safe">5 of 5</dd></div>
-            <div><dt>Threats stopped this week</dt><dd id="f-stopped">3</dd></div>
-            <div><dt>Cures your devices know</dt><dd id="f-cures">14</dd></div>
+            <div><dd id="f-safe">5 of 5</dd><dt>Devices safe</dt></div>
+            <div><dd id="f-stopped">3</dd><dt>Stopped this week</dt></div>
+            <div><dd id="f-cures">14</dd><dt>Cures known</dt></div>
           </dl>
         </div>
       </section>
@@ -63,19 +63,17 @@
 
       <section class="panel memory" aria-labelledby="memory-title">
         <header class="panel-head">
-          <div>
-            <h2 id="memory-title">Immune memory</h2>
-            <p>Each rung is a cure this device carries. Hover one to see what it stops.</p>
-          </div>
-          <button class="btn" id="open-genome">
-            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M11 4h5v5M16 4l-7 7M14 12v4H4V6h4" /></svg>
-            Open global genome
-          </button>
+          <h2 id="memory-title">Immune memory</h2>
+          <p>Each rung is a cure this Mac carries. Hover one to see what it stops.</p>
         </header>
         <div class="gl-box">
           <canvas id="local-gl"></canvas>
           <div class="probe" id="local-probe" aria-hidden="true"><strong></strong><span></span></div>
         </div>
+        <button class="btn" id="open-genome">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M11 4h5v5M16 4l-7 7M14 12v4H4V6h4" /></svg>
+          Open global genome
+        </button>
       </section>
 
       <section class="panel contrib" aria-labelledby="contrib-title">

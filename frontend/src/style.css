@@ -66,14 +66,19 @@ body[data-alert='cured'] .live-dot { background: var(--t); box-shadow: 0 0 10px 
 /* ---------- Views ---------- */
 .view { display: grid; gap: 14px; padding: 14px; min-height: 0; }
 .panel { position: relative; min-height: 0; min-width: 0; background: var(--panel); border: 1px solid var(--faint); border-radius: 16px; padding: 20px 22px; overflow: hidden; }
-.panel-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 10px; }
+.panel-head { margin-bottom: 12px; }
 .panel-head p { color: var(--muted); font-size: 13.5px; margin-top: 4px; max-width: 46ch; }
 .empty { color: var(--muted); font-size: 14px; list-style: none; padding: 12px 0; }
 
 .view-standard {
-  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
-  grid-template-rows: minmax(0, 1.08fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(260px, 0.62fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-areas: 'health health memory' 'mesh contrib memory';
 }
+.health { grid-area: health; }
+.mesh { grid-area: mesh; }
+.memory { grid-area: memory; }
+.contrib { grid-area: contrib; }
 
 /* Health: the one loud element */
 .health {
@@ -81,18 +86,20 @@ body[data-alert='cured'] .live-dot { background: var(--t); box-shadow: 0 0 10px 
   background: radial-gradient(120% 90% at 18% 50%, color-mix(in srgb, var(--s) 13%, transparent), transparent 60%), var(--panel);
   transition: background 0.8s;
 }
-.ring-wrap { width: clamp(180px, 22vw, 250px); aspect-ratio: 1; }
+.ring-wrap { width: clamp(160px, min(22vw, 30vh), 250px); aspect-ratio: 1; }
 .ring { width: 100%; height: 100%; overflow: visible; }
 .ring circle { fill: none; }
 .ring-orbit { stroke: var(--faint); stroke-width: 1; stroke-dasharray: 2 7; }
 #ring-segs circle { stroke-width: 12; stroke-linecap: round; filter: drop-shadow(0 0 6px currentColor); }
 .ring-shield path { fill: none; stroke: var(--s); stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; transition: stroke 0.6s; }
 .ring-shield .strand { stroke-width: 1; }
-.health h1 { font: 500 clamp(24px, 2.6vw, 34px)/1.12 var(--display); letter-spacing: -0.01em; max-width: 16ch; }
+.health h1 { font: 500 clamp(24px, 2.6vw, 34px)/1.12 var(--display); letter-spacing: -0.01em; max-width: 22ch; }
 .health-copy > p { color: #b9c6d4; font-size: 16px; line-height: 1.55; margin-top: 12px; max-width: 42ch; }
-.facts { display: grid; grid-template-columns: repeat(3, auto); justify-content: start; gap: 28px; margin-top: 24px; }
-.facts dt { color: var(--muted); font-size: 12.5px; max-width: 17ch; line-height: 1.3; }
-.facts dd { font: 400 22px/1.2 var(--display); margin-top: 6px; font-variant-numeric: tabular-nums; }
+.facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); max-width: 480px; margin-top: 26px; border-top: 1px solid var(--faint); }
+.facts div { padding: 14px 0 0; }
+.facts div + div { padding-left: 20px; border-left: 1px solid var(--faint); }
+.facts dt { color: var(--muted); font-size: 12.5px; white-space: nowrap; margin-top: 4px; }
+.facts dd { font: 400 24px/1.2 var(--display); font-variant-numeric: tabular-nums; }
 
 /* Mesh */
 .mesh { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
@@ -105,12 +112,13 @@ body[data-alert='cured'] .live-dot { background: var(--t); box-shadow: 0 0 10px 
 #mesh .node .name { fill: var(--bone); font-size: 13.5px; font-weight: 500; }
 #mesh .node .state { fill: var(--s); font-size: 12px; }
 #mesh .pulse { fill: var(--t); filter: drop-shadow(0 0 6px var(--t)); }
-.legend { display: flex; gap: 18px; list-style: none; font-size: 12.5px; color: var(--muted); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; white-space: nowrap; list-style: none; font-size: 12.5px; color: var(--muted); }
 .legend li::before { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--s); margin-right: 7px; }
 
 /* Local genome */
-.memory { display: grid; grid-template-rows: auto minmax(0, 1fr); padding-bottom: 0; }
-.gl-box { position: relative; min-height: 0; margin: 0 -22px; border-top: 1px solid var(--faint); }
+.memory { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
+.memory #open-genome { justify-self: stretch; justify-content: center; margin-top: 14px; }
+.gl-box { position: relative; min-height: 0; margin: 0 -22px; border-block: 1px solid var(--faint); }
 .gl-full { border: 0; }
 .gl-box canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .btn {

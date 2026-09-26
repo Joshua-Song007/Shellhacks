@@ -37,7 +37,8 @@ document.querySelectorAll('.modes button').forEach((btn) =>
     const hide = $(`#${mode === 'standard' ? 'advanced' : 'standard'}`);
     hide.hidden = true;
     show.hidden = false;
-    if (!reduced) gsap.from(show.children, { opacity: 0, y: 10, duration: 0.5, ease: 'power3.out', stagger: 0.04 });
+    // fromTo, not from: a toggle mid-fade would otherwise make the half-faded value the new end state.
+    if (!reduced) gsap.fromTo(show.children, { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.5, ease: 'power3.out', stagger: 0.04, overwrite: true });
     if (mode === 'advanced') scrollTerm();
   }),
 );
@@ -79,7 +80,7 @@ function renderHealth() {
   if (h.textContent !== title) {
     h.textContent = title;
     $('#health-sub').textContent = sub;
-    if (!reduced) gsap.from(['#health-title', '#health-sub'], { opacity: 0, y: 8, duration: 0.5, ease: 'power3.out', stagger: 0.06 });
+    if (!reduced) gsap.fromTo(['#health-title', '#health-sub'], { opacity: 0, y: 8 }, { opacity: 1, y: 0, duration: 0.5, ease: 'power3.out', stagger: 0.06, overwrite: true });
   }
   $('.health').dataset.s = phase;
   $('#f-safe').textContent = `${safe} of ${state.devices.length}`;
@@ -97,15 +98,16 @@ const probe = $('#local-probe');
 let probeI = -1;
 const helix = createHelix($('#local-gl'), {
   hashes: state.genes.map((g) => g.gene),
-  tilt: Math.PI / 2,
+  tilt: 0,
   bg: 0x060a16,
-  length: 0.8,
-  thickness: 0.34,
+  length: 0.9,
+  thickness: 0.62,
   reduced,
   onHover(h) {
     probe.classList.toggle('on', !!h);
     if (!h) return (probeI = -1);
-    probe.style.transform = `translate(${h.x}px, ${h.y}px)`;
+    // Narrow column: keep the card inside the box instead of clipping off the right edge.
+    probe.style.transform = `translate(${Math.min(h.x, probe.parentElement.clientWidth - probe.offsetWidth - 28)}px, ${h.y}px)`;
     if (h.index === probeI) return;
     probeI = h.index;
     const g = state.genes[h.index];
