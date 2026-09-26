@@ -6,6 +6,11 @@ import { mountChain } from './chain.js';
 
 gsap.registerPlugin(ScrollTrigger, ScrollToPlugin);
 
+// Always start at the top on reload; the loader and scroll choreography assume scrollY = 0.
+history.scrollRestoration = 'manual';
+scrollTo(0, 0);
+addEventListener('pagehide', () => scrollTo(0, 0)); // some browsers restore anyway; leave at the top
+
 // ponytail: placeholder until the Tauri .dmg is published; swap for the release URL.
 const DOWNLOAD_URL = 'https://github.com/REPLACE_ME/t-cell/releases/latest';
 
@@ -67,7 +72,6 @@ const letters = Array.from({ length: mobile ? 18 : 34 }, () => 'ATGC'[(Math.rand
 $('.seq-a').innerHTML = letters.map((b) => `<span data-b="${b}">${b}</span>`).join('');
 $('.seq-b').innerHTML = letters.map((b) => `<span data-b="${COMP[b]}">${COMP[b]}</span>`).join('');
 const pairSpans = $$('.seq-b span');
-const count = $('.loader-count');
 const pct = $('#pct');
 
 const progress = { p: 0 };
@@ -77,7 +81,6 @@ const loading = gsap.to(progress, {
   ease: 'power1.inOut',
   onUpdate() {
     pct.textContent = Math.round(progress.p * 100);
-    count.style.setProperty('--w', 50 + progress.p * 100);
     const n = Math.floor(progress.p * pairSpans.length);
     pairSpans.forEach((s, i) => s.classList.toggle('on', i < n));
   },
@@ -105,29 +108,16 @@ Promise.all([loading.then(), document.fonts.ready]).then(() => {
 
 // ---------- Scroll choreography ----------
 function setupScroll() {
-  // Hero -> steps: helix swings the other way and drifts right
-  gsap.to(helix.state, {
-    tilt: mobile ? -0.2 : -0.28,
-    x: mobile ? 1.8 : 3.0,
-    ease: 'none',
-    scrollTrigger: { trigger: '#how', start: 'top bottom', end: 'top top', scrub: 1 },
-  });
-
-  // Steps -> chain: helix unzips into a horizontal chain locked to #band
-  gsap.fromTo(
-    helix.state,
-    { tilt: mobile ? -0.2 : -0.28, x: mobile ? 1.8 : 3.0, chain: 0, follow: 0, scale: layout.scale },
-    {
-      tilt: -Math.PI / 2,
-      x: 0,
-      chain: 1,
-      follow: 1,
-      scale: 1,
-      ease: 'none',
-      immediateRender: false,
-      scrollTrigger: { trigger: '#chain', start: 'top bottom', end: 'top 15%', scrub: 1 },
-    },
-  );
+  // One scrubbed timeline owns the helix, so fast scrolls can't leave two tweens fighting over tilt/x.
+  gsap
+    .timeline({
+      defaults: { ease: 'none' },
+      scrollTrigger: { trigger: '#how', start: 'top bottom', endTrigger: '#chain', end: 'top 15%', scrub: 0.6 },
+    })
+    // Hero -> steps: helix swings the other way and drifts right
+    .to(helix.state, { tilt: mobile ? -0.2 : -0.28, x: mobile ? 1.8 : 3.0, duration: 1 })
+    // Steps -> chain: helix unzips into a horizontal chain locked to #band
+    .to(helix.state, { tilt: -Math.PI / 2, x: 0, chain: 1, follow: 1, scale: 1, duration: 1.4 });
 
   // Step progress rail and active step
   gsap.to('.step-list', {

@@ -203,7 +203,9 @@ export function createHelix(canvas, { reduced = false, onHover = () => {} } = {}
     let y = state.y;
     if (anchor && state.follow > 0) {
       const r = anchor.getBoundingClientRect();
-      const ay = (0.5 - (r.top + r.height / 2) / innerHeight) * visibleHeight();
+      // Clamped: on a fast scroll the band can be screens away while follow is still mid-scrub
+      const vh = visibleHeight();
+      const ay = THREE.MathUtils.clamp((0.5 - (r.top + r.height / 2) / innerHeight) * vh, -vh * 0.6, vh * 0.6);
       y = THREE.MathUtils.lerp(state.y, ay, state.follow);
     }
     root.position.set(state.x, y, 0);
@@ -246,7 +248,7 @@ export function createHelix(canvas, { reduced = false, onHover = () => {} } = {}
       // Slot along the axis; in chain mode pairs conveyor forward and wrap off-screen.
       const slot = (((i + flow) % N) + N) % N;
       const ay = (slot - half) * SP;
-      const a = i * TWIST + phase;
+      const a = slot * TWIST + phase; // twist by slot so the conveyor's wrap seam stays at the off-screen ends
       const pop = e * 0.35 * (1 - state.chain);
 
       pA.set(Math.cos(a) * R, ay, Math.sin(a) * R).lerp(tmp.set(-CUBE * 0.5 - 0.02, ay, pop), e);
