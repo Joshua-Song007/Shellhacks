@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "T-cell Event Schema v1 (TES v1)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["v", "seq", "ts_ns", "recv_ns", "proc", "event"],
+  "properties": {
+    "v": { "const": 1 },
+    "seq": { "$ref": "#/$defs/u64" },
+    "ts_ns": { "$ref": "#/$defs/u64" },
+    "recv_ns": { "$ref": "#/$defs/u64" },
+    "proc": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pid", "pidver", "ppid", "exe", "platform"],
+      "properties": {
+        "pid": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
+        "pidver": { "$ref": "#/$defs/u64" },
+        "ppid": { "$ref": "#/$defs/u32" },
+        "exe": { "$ref": "#/$defs/abspath" },
+        "signing_id": { "type": ["string", "null"] },
+        "team_id": { "type": ["string", "null"] },
+        "platform": { "type": "boolean" }
+      }
+    },
+    "event": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/variant",
+          "properties": {
+            "kind": { "const": "exec" },
+            "data": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["target", "args"],
+              "properties": {
+                "target": { "$ref": "#/$defs/abspath" },
+                "args": { "type": "array", "items": { "type": "string" } }
+              }
+            }
+          }
+        },
+        {
+          "$ref": "#/$defs/variant",
+          "properties": {
+            "kind": { "const": "fork" },
+            "data": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["child_pid", "child_pidver"],
+              "properties": {
+                "child_pid": { "$ref": "#/$defs/u32" },
+                "child_pidver": { "$ref": "#/$defs/u64" }
+              }
+            }
+          }
+        },
+        {
+          "$ref": "#/$defs/variant",
+          "properties": {
+            "kind": { "const": "exit" },
+            "data": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["status"],
+              "properties": {
+                "status": { "type": "integer", "minimum": -2147483648, "maximum": 2147483647 }
+              }
+            }
+          }
+        },
+        {
+          "$ref": "#/$defs/variant",
+          "properties": {
+            "kind": { "const": "open" },
+            "data": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["path", "write"],
+              "properties": {
+                "path": { "$ref": "#/$defs/abspath" },
+                "write": { "type": "boolean" }
+              }
+            }
+          }
+        },
+        {
+          "$ref": "#/$defs/variant",
+          "properties": {
+            "kind": { "const": "create" },
+            "data": { "$ref": "#/$defs/path_data" }
+          }
+        },
+        {
+          "$ref": "#/$defs/variant",
+          "properties": {
+            "kind": { "const": "rename" },
+            "data": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["from", "to"],
+              "properties": {
+                "from": { "$ref": "#/$defs/abspath" },
+                "to": { "$ref": "#/$defs/abspath" }
+              }
+            }
+          }
+        },
+        {
+          "$ref": "#/$defs/variant",
+          "properties": {
+            "kind": { "const": "unlink" },
+            "data": { "$ref": "#/$defs/path_data" }
+          }
+        }
+      ]
+    }
+  },
+  "$defs": {
+    "u32": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+    "u64": { "type": "integer", "minimum": 0, "maximum": 18446744073709551615 },
+    "abspath": { "type": "string", "pattern": "^/" },
+    "variant": {
+      "type": "object",
+      "required": ["kind", "data"],
+      "properties": { "kind": true, "data": true },
+      "additionalProperties": false
+    },
+    "path_data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path"],
+      "properties": { "path": { "$ref": "#/$defs/abspath" } }
+    }
+  }
+}

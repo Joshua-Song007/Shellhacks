@@ -1,0 +1,12 @@
+[package]
+name = "tes"
+edition.workspace = true
+version.workspace = true
+publish.workspace = true
+
+[dependencies]
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+
+[dev-dependencies]
+jsonschema = { version = "0.58.0", default-features = false }

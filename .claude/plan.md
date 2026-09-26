@@ -8,9 +8,9 @@
 - [ ] spikes/spike3_art_capture.md — confirm 1 ART atomic (macOS variant) captures to TES trace (SPIKE-3); fail -> sandbox uses FR-R-4 hand-authored trace only
 
 ## Phase 1 — TES schema (DATA-1; consumed by all downstream crates)
-- [ ] crates/tes/src/schema.rs — TES v1 struct: v, seq, ts_ns, recv_ns, proc{pid,pidver,ppid,exe,signing_id?,team_id?,platform}, event tagged union (exec/fork/exit/open/create/rename/unlink) (FR-D-4)
-- [ ] crates/tes/schema/tes_v1.schema.json — JSON Schema twin for out-of-Rust validation (§9)
-- [ ] crates/tes/src/validate.rs — boundary validator: reject unknown fields, wrong schema version, non-absolute path, pid==0; count rejects, observable not silent (FR-D-5, NFR-7); inbound adapters tolerate unknown fields pre-boundary (FR-D-6)
+- [x] crates/tes/src/schema.rs — TES v1 struct: v, seq, ts_ns, recv_ns, proc{pid,pidver,ppid,exe,signing_id?,team_id?,platform}, event tagged union (exec/fork/exit/open/create/rename/unlink) (FR-D-4) (pid/ppid typed u32 so negative pids are unparseable; per-kind `data` shapes: exec{target,args}, fork{child_pid,child_pidver}, exit{status}, open{path,write}, create/unlink{path}, rename{from,to} — overview.md leaves kind-specific data unspecified; no revisit scheduled)
+- [x] crates/tes/schema/tes_v1.schema.json — JSON Schema twin for out-of-Rust validation (§9) (agreement with Rust boundary enforced by crates/tes/tests/schema_twin.rs)
+- [x] crates/tes/src/validate.rs — boundary validator: reject unknown fields, wrong schema version, non-absolute path, pid==0; count rejects, observable not silent (FR-D-5, NFR-7); inbound adapters tolerate unknown fields pre-boundary (FR-D-6) (also counts seq-gap events; one Validator per source stream)
 
 ## Phase 2 — Scout (detection; depends on tes)
 - [ ] crates/scout/src/source_eslogger.rs — primary source, subscribe exec/fork/exit/open/create/rename/unlink, root+FDA, no ES client entitlement; pidver = audit token `pidversion`, native (FR-D-2, FR-D-7)
