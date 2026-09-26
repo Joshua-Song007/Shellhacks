@@ -133,11 +133,10 @@ function setupScroll() {
 
   // Chain -> enterprise: blocks leave the chain and regroup into a company-wide mesh.
   // Only `mesh` is tweened here; helix.js blends the pose from it, so this never fights the timeline above.
-  gsap.to(helix.state, {
-    mesh: 1,
-    ease: 'none',
-    scrollTrigger: { trigger: '#enterprise', start: 'top 85%', end: 'top 15%', scrub: 0.6 },
-  });
+  gsap
+    .timeline({ defaults: { ease: 'none' }, scrollTrigger: { trigger: '#enterprise', start: 'top 85%', end: 'top 15%', scrub: 0.6 } })
+    .to(helix.state, { mesh: 1 })
+    .to('#fade', { opacity: 1 }, 0);
 
   // Active tab
   ScrollTrigger.create({

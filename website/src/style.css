@@ -216,12 +216,10 @@ button.btn.btn-dark { border: 1px solid transparent; }
   min-height: 100svh; display: flex; flex-direction: column; justify-content: center; align-items: flex-start;
   padding: 18vh var(--gutter) 8vh; max-width: calc(660px + var(--gutter) * 2);
 }
-.enterprise { position: relative; }
-/* the map turns behind the copy; a soft fade keeps the text readable whichever site passes under it */
-.enterprise::before {
-  content: ''; position: absolute; z-index: -1; inset: 0 auto 0 0; width: min(100vw, 900px);
-  background: radial-gradient(60% 55% at 22% 55%, rgba(2, 4, 11, 0.78), transparent 100%);
-  pointer-events: none;
+/* The map turns behind the copy; one fixed fade (not one per section) keeps text readable with no seam between sections. */
+#fade {
+  position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: 0;
+  background: linear-gradient(90deg, rgba(2, 4, 11, 0.8), rgba(2, 4, 11, 0.5) 38%, transparent 68%);
 }
 .ent-badge { margin-bottom: 26px; }
 .ent-sub { margin-top: 22px; color: #c3cfd8; max-width: 46ch; }
@@ -257,7 +255,7 @@ button.btn.btn-dark { border: 1px solid transparent; }
 .demo input::placeholder { color: #5d6e82; }
 .demo .btn { flex: none; }
 .demo-done { display: flex; align-items: center; gap: 14px; font-size: 17px; max-width: 46ch; }
-.demo-done[hidden] { display: none; }
+.demo[hidden], .demo-done[hidden] { display: none; }
 .demo-done svg { flex: none; width: 34px; height: 34px; fill: none; stroke: var(--a); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .demo-done circle { stroke-dasharray: 63; }
 .demo-done path { stroke-dasharray: 16; }
@@ -289,6 +287,7 @@ button.btn.btn-dark { border: 1px solid transparent; }
   .stats > div:nth-child(n + 3) { border-top: 1px solid var(--faint); }
   .hero-title .line { white-space: normal; }
   .enterprise { justify-content: flex-end; padding-top: 55svh; }
+  #fade { background: linear-gradient(0deg, rgba(2, 4, 11, 0.85) 30%, transparent 70%); }
   .enterprise > * { position: relative; }
   .demo-bar { flex-direction: column; }
   .demo input { padding: 14px; }
