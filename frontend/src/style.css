@@ -56,6 +56,8 @@ h2 { font: 500 15px/1.3 var(--display); letter-spacing: 0.01em; }
 .modes button { position: relative; z-index: 1; padding: 6px 18px; font-size: 13.5px; font-weight: 500; color: var(--muted); border-radius: 999px; transition: color 0.3s; }
 .modes button[aria-selected='true'] { color: var(--abyss); }
 .mode-pill { position: absolute; top: 4px; bottom: 4px; left: 4px; width: 90px; border-radius: 999px; background: var(--bone); }
+.source-badge { justify-self: end; font: 600 10.5px/1 var(--body); letter-spacing: 0.06em; text-transform: uppercase; padding: 4px 8px; border-radius: 999px; border: 1px solid var(--faint); color: var(--a); }
+.source-badge[data-source='simulated'] { color: var(--amber); }
 .live { justify-self: end; display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
 .live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--a); box-shadow: 0 0 10px var(--a); animation: beat 2s ease-in-out infinite; }
 body[data-alert='watching'] .live-dot { background: var(--amber); box-shadow: 0 0 10px var(--amber); }
@@ -356,6 +358,8 @@ body[data-alert='cured'] .live-dot { background: var(--t); box-shadow: 0 0 10px 
 .pair-wait { display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 13.5px !important; color: var(--muted) !important; }
 .pair-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--amber); box-shadow: 0 0 10px var(--amber); animation: beat 1.4s ease-in-out infinite; }
 .pair-glyph { width: 52px; height: 52px; padding: 11px; border-radius: 50%; background: var(--raise); border: 1.8px solid var(--a); fill: none; stroke: var(--bone); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.pair-join-input { resize: none; width: 100%; padding: 10px 12px; border-radius: 10px; background: var(--raise); border: 1px solid var(--faint); color: var(--bone); font: 13px/1.4 var(--mono); }
+.pair-join-input:focus-visible { outline: 2px solid var(--a); outline-offset: 2px; }
 .btn-danger { background: var(--threat); color: var(--bone); }
 .btn-danger:hover { background: #ff5c77; }
 #mesh .node.pickable { cursor: pointer; }

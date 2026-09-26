@@ -123,6 +123,33 @@ impl Roster {
     pub fn paired(&self) -> &[PublicKey] {
         &self.paired
     }
+
+    /// Issuer-side counterpart to `redeem`: `code` was generated locally
+    /// (`code.issuer` is always this device's own key), and `presenter` is
+    /// whoever presented `presented_nonce` over the wire -- so this records
+    /// `presenter`, not `code.issuer`. Same expiry/constant-time checks.
+    pub fn admit(&mut self, code: &PairingCode, presented_nonce: &[u8; 16], presenter: PublicKey) -> Result<(), PairingError> {
+        if code.is_expired() {
+            return Err(PairingError::Expired);
+        }
+        if !constant_time_eq(&code.nonce, presented_nonce) {
+            return Err(PairingError::NonceMismatch);
+        }
+        if !self.paired.contains(&presenter) {
+            self.paired.push(presenter);
+        }
+        Ok(())
+    }
+
+    /// Raw, ceremony-free insert: restoring a persisted roster on startup,
+    /// or recording a peer's self-attested (and PeerId-verified) pubkey
+    /// after a successful pairing response -- neither has a `PairingCode`
+    /// to run through `redeem`/`admit`. Push-if-absent, like both of those.
+    pub fn add_trusted(&mut self, key: PublicKey) {
+        if !self.paired.contains(&key) {
+            self.paired.push(key);
+        }
+    }
 }
 
 fn constant_time_eq(a: &[u8; 16], b: &[u8; 16]) -> bool {
@@ -202,5 +229,56 @@ mod tests {
         let code2 = PairingCode::generate(&issuer);
         roster.redeem(&code2, &code2.nonce()).unwrap();
         assert_eq!(roster.paired().len(), 1);
+    }
+
+    #[test]
+    fn admit_accepts_a_valid_presenter_once() {
+        let owner = temp_identity();
+        let presenter = temp_identity();
+        let code = PairingCode::generate(&owner);
+        let mut roster = Roster::new();
+        roster.admit(&code, &code.nonce(), presenter.public()).unwrap();
+        assert_eq!(roster.paired(), [presenter.public()], "admit records the presenter, not code.issuer");
+    }
+
+    #[test]
+    fn admit_rejects_a_wrong_nonce() {
+        let owner = temp_identity();
+        let presenter = temp_identity();
+        let code = PairingCode::generate(&owner);
+        let mut roster = Roster::new();
+        assert_eq!(roster.admit(&code, &[0u8; 16], presenter.public()), Err(PairingError::NonceMismatch));
+        assert!(roster.paired().is_empty());
+    }
+
+    #[test]
+    fn admit_rejects_an_expired_code() {
+        let owner = temp_identity();
+        let presenter = temp_identity();
+        let code = PairingCode::with_ttl(&owner, Duration::from_millis(1));
+        std::thread::sleep(Duration::from_millis(20));
+        let mut roster = Roster::new();
+        assert_eq!(roster.admit(&code, &code.nonce(), presenter.public()), Err(PairingError::Expired));
+    }
+
+    #[test]
+    fn admitting_the_same_presenter_twice_does_not_duplicate() {
+        let owner = temp_identity();
+        let presenter = temp_identity();
+        let mut roster = Roster::new();
+        let code1 = PairingCode::generate(&owner);
+        roster.admit(&code1, &code1.nonce(), presenter.public()).unwrap();
+        let code2 = PairingCode::generate(&owner);
+        roster.admit(&code2, &code2.nonce(), presenter.public()).unwrap();
+        assert_eq!(roster.paired().len(), 1);
+    }
+
+    #[test]
+    fn add_trusted_dedups_on_repeat() {
+        let key = temp_identity().public();
+        let mut roster = Roster::new();
+        roster.add_trusted(key.clone());
+        roster.add_trusted(key.clone());
+        assert_eq!(roster.paired(), [key]);
     }
 }

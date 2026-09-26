@@ -2,8 +2,11 @@
 //! until Scout delivers a WakeSignal, then runs exactly one
 //! search -> compile -> apply cycle against the configured trace file(s)
 //! and self-terminates ("apoptosis") when `main` returns -- no loop, no
-//! respawn. A supervisor relaunching Soldier for the next threat is out of
-//! scope.
+//! respawn. Relaunch is handled by an external supervisor
+//! (frontend/electron/backend.cjs), which respawns a fresh Soldier after
+//! each exit. Wake signals are buffered by the supervisor, so a wake
+//! arriving during the respawn gap is delivered to the next Soldier, not
+//! lost.
 //!
 //! FR-L-7 / AC-5 stage 4: on wake, the threat is reported (`submit_threat`,
 //! corroboration) and the Genome Registry is read before any gene runs. A
@@ -188,6 +191,7 @@ fn run(args: &Args) -> io::Result<()> {
     };
 
     let mut cure = json!({ "type": "cure", "threat_id": wake.threat_id });
+    cure["schema"] = json!(wake.schema.iter().map(|a| format!("{a:?}")).collect::<Vec<_>>());
     let mut commit_sigs: Vec<String> = Vec::new();
     let suppressed = decision == Decision::Suppressed;
     let applied = match decision {
@@ -287,5 +291,14 @@ mod tests {
             schema_hash(&[ExecFromTempOrCache, RapidFileModBurst]),
             schema_hash(&[RapidFileModBurst, ExecFromTempOrCache])
         );
+    }
+
+    #[test]
+    fn cure_schema_stringifies_each_action_in_order() {
+        use Action::*;
+        let wake_schema = vec![ExecFromTempOrCache, RapidFileModBurst, RecoverySnapshotTamper];
+        let mut cure = json!({ "type": "cure", "threat_id": "deadbeef" });
+        cure["schema"] = json!(wake_schema.iter().map(|a| format!("{a:?}")).collect::<Vec<_>>());
+        assert_eq!(cure["schema"], json!(["ExecFromTempOrCache", "RapidFileModBurst", "RecoverySnapshotTamper"]));
     }
 }

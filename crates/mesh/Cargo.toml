@@ -11,13 +11,21 @@ publish.workspace = true
 # (confirmed: a plain `cargo build` fails without this), so they're normal
 # deps instead. Both are lightweight and already libp2p-adjacent; the
 # library code itself (identity.rs/transport.rs) never imports either.
-libp2p = { version = "0.54", features = ["tcp", "noise", "yamux", "tokio", "macros", "ping"] }
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "fs"] }
+libp2p = { version = "0.54", features = ["tcp", "noise", "yamux", "tokio", "macros", "ping", "request-response", "json"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "fs", "io-std"] }
 rand = "0.8"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
 futures = "0.3"
+sha2 = "0.11.0"
 ledger-client = { path = "../ledger-client" }
+# meshd.rs (a real bin target, no dev-deps) builds a live LedgerClient --
+# same bin-target-needs-normal-deps rule as soldier's own main.rs.
+solana-commitment-config = "3"
+# meshd.rs's Stage-3 regression + benign-trace loading (soldier::regression,
+# soldier::replay_target::ReplayTarget) -- only the binary touches another
+# caste's crate, same shape as soldier's own ledger-client dependency.
+soldier = { path = "../soldier" }
 
 [dev-dependencies]
 tempfile = "3"
@@ -26,6 +34,5 @@ tempfile = "3"
 # pattern ledger-client's own local-validator tests already use.
 solana-client = "3"
 solana-pubkey = "3.0.0"
-solana-commitment-config = "3"
 solana-keypair = "3.1.2"
 solana-signer = "3.0.1"

@@ -20,6 +20,7 @@
         <button role="tab" data-mode="standard" aria-selected="true">Standard</button>
         <button role="tab" data-mode="advanced" aria-selected="false">Advanced</button>
       </div>
+      <span id="source-badge" class="source-badge" hidden></span>
       <p class="live"><span class="live-dot"></span><span id="live-text">Protecting 5 devices</span></p>
     </header>
 
@@ -160,7 +161,14 @@
           <div class="pair-hex"><code id="pair-hex"></code><button class="btn-quiet" data-act="copy" id="pair-copy">Copy</button></div>
         </details>
         <p class="pair-wait" id="pair-wait"><span class="pair-dot"></span>Waiting for the new device</p>
-        <footer><button class="btn-quiet" data-act="cancel">Cancel</button></footer>
+        <footer><button class="btn-quiet" data-act="cancel">Cancel</button><button class="btn-quiet" data-act="show-join" id="show-join" hidden>Have a code instead?</button></footer>
+      </section>
+      <section class="pair-step" data-step="join" hidden>
+        <h2>Join a network</h2>
+        <p>Paste the code shown on the other device.</p>
+        <textarea class="pair-join-input" id="join-uri" rows="3" placeholder="tcell://pair?..."></textarea>
+        <p class="pair-wait" id="join-wait" hidden><span class="pair-dot"></span>Waiting to pair</p>
+        <footer><button class="btn-quiet" data-act="cancel">Cancel</button><button class="btn" data-act="join">Join</button></footer>
       </section>
       <section class="pair-step" data-step="paired" hidden>
         <svg class="pair-glyph" viewBox="0 0 24 24" aria-hidden="true"><path id="pair-glyph" /></svg>

@@ -3,7 +3,7 @@
 File/module structure and internal component-to-component dependency graph. This describes structural dependencies (what imports/depends on what) — for build order and per-file implementation detail, see `plan.md`.
 
 ## Module tree
-```x
+```
 Cargo.toml        workspace (members: tes, scout; ledger-program is a separate Anchor workspace)
 crates/
   tes/            schema.rs, validate.rs, schema/tes_v1.schema.json, tests/schema_twin.rs
@@ -36,7 +36,8 @@ spikes/           spike1_eslogger.sh, spike1_trigger.c, spike2_libp2p_pair.rs, s
 - allele_search -> scout::scoring::Action (containment_value reuses Action::weight() rather than a second weight table); no tes dependency; defines the ContainmentTarget trait, implemented by replay_target
 - replay_target -> scout::scoring::{Action, exec_actions, BURST_WINDOW_NS, BURST_OPS} (pure/stateless helpers only, not Scorer/lineage), tes::schema::{TesEvent, Event}; implements allele_search::ContainmentTarget
 - gene_compile -> allele_search::{Allele, ALL} (bitmask encoding), sandbox::{Sandbox, SandboxError} (apply = instantiate); own sha2/wat deps; no tes/scout dependency
-- lib.rs -> trigger, sandbox, allele_search, replay_target, gene_compile (module declarations only)
+- regression -> allele_search::{Allele, ALL, ContainmentTarget} (decodes the `allele_bitmask` global back into a bitmask -> `Vec<Allele>`, inverse of gene_compile's private encoding, same bit order), replay_target::ReplayTarget (as the benign-behavior source via ContainmentTarget::benign_actions()), sandbox::Sandbox (instantiate); no gene_compile dependency (doesn't need to re-derive the encoding, only mirror its documented convention); no tes/scout dependency beyond what allele_search/replay_target already pull in
+- lib.rs -> trigger, sandbox, allele_search, replay_target, gene_compile, regression (module declarations only)
 - main.rs (binary entrypoint, not part of lib.rs) -> trigger, replay_target, allele_search, gene_compile, ledger_client::LedgerClient (submit_threat, fetch_genome_registry for the FR-L-7 check, commit_gene); lib.rs modules stay ledger-free, only the binary touches the chain
 
 ## Ledger program internals (A -> B means A calls/uses B)
@@ -50,9 +51,32 @@ spikes/           spike1_eslogger.sh, spike1_trigger.c, spike2_libp2p_pair.rs, s
 - tests/test_instructions.rs -> litesvm (loads the built .so directly, no anchor-cli/local-validator/Node needed at test time) + the 5 devnet keypairs under keys/ (gitignored) for PoI-signing scenarios
 
 ## Ledger client internals (A -> B means A calls/uses B)
-- client.rs -> t_cell::{instruction, accounts, state, ID, THREAT_SEED, GENOME_SEED, MAX_GENE_BYTES} (Anchor-generated types, reused directly rather than hand-encoded); anchor_lang::solana_program::{instruction::Instruction, system_program} (t_cell has no own solana_program re-export, goes through anchor-lang); solana_client::rpc_client::RpcClient (sync/blocking — matches the rest of this project, no async runtime anywhere yet); own MAX_CHUNK_BYTES=400 (independently declared, no dependency edge onto soldier's gene_compile.rs, which has a *different* ~900B constant for a *different* concern — compiled gene size, not tx-chunk size)
+- client.rs -> t_cell::{instruction, accounts, state, ID, THREAT_SEED, GENOME_SEED, MAX_GENE_BYTES} (Anchor-generated types, reused directly rather than hand-encoded); anchor_lang::solana_program::{instruction::Instruction, system_program} (t_cell has no own solana_program re-export, goes through anchor-lang); solana_client::rpc_client::RpcClient (sync/blocking — matches the rest of this project, no async runtime anywhere yet); own MAX_CHUNK_BYTES=400 (independently declared, no dependency edge onto soldier's gene_compile.rs, which has a *different* ~900B constant for a *different* concern — compiled gene size, not tx-chunk size); `recent_signatures`/`all_genomes` (Phase 9 item 7b) add solana_client::rpc_client::GetConfirmedSignaturesForAddress2Config + solana_client::rpc_response::RpcConfirmedTransactionStatusWithSignature -- `all_genomes` reuses the existing `AccountDeserialize` import as a filter over `get_program_accounts`' mixed ThreatRegistry/GenomeRegistry results, no new account-layout code
 - lib.rs -> client (module declaration + re-export only)
 - examples/devnet_smoke.rs, examples/suppress.rs, tests/integration.rs -> client::LedgerClient (public API only); integration.rs also directly constructs its own RpcClient for test-only airdrops (not part of LedgerClient's real surface — production clients don't fund themselves)
+- examples/feed.rs (new, Phase 9 item 7b) -> client::LedgerClient::{recent_signatures, all_genomes} in a poll loop; two pure/unit-tested diff helpers (`new_signatures`, `genome_diff`) decide what's actually new since the last tick, matching `frontend -> process/NDJSON`'s "ledger-client `feed` example stdout" note below -- this is that process, now real
+
+## Mesh daemon internals (crates/mesh/src/bin/meshd.rs, A -> B means A calls/uses B)
+- composed `#[derive(NetworkBehaviour)] struct MeshBehaviour { ping, rr: request_response::json::Behaviour<WireRequest,WireResponse> }` on the `/tcell/pair/1` protocol -- derive-generated `MeshBehaviourEvent::{Ping,Rr}` confirmed by a scratch probe build, not guessed
+- `WireRequest::{Pair{nonce_hex,pubkey}, Hint(mesh::message::CureHint), Status{status}}` / `WireResponse::{Ok{pubkey}, Err(String)}` -- both `Pair` and `Ok` carry the sender's own protobuf-encoded pubkey because a libp2p `PeerId` cannot be reversed into a `PublicKey`; every handler verifies `pubkey.to_peer_id() == observed_peer_id` before trusting a self-attested key
+- `handle_inbound_pair`/`handle_pair_response` -> `mesh::identity::{Roster::admit, Roster::add_trusted}`; `handle_inbound_hint` -> `ledger_client::LedgerClient::fetch_genome_registry`, `mesh::verify::{evaluate, confirm_via_chain}`, `soldier::gene_compile::apply`
+- `Stage3Adapter` -> `soldier::regression::check` + a `soldier::replay_target::ReplayTarget` loaded once at startup from `--benign-trace` (`ReplayTarget::from_traces(io::empty(), benign_reader)`, since meshd only ever needs `benign_actions()`)
+- `MeshState` bundles `Roster`/`RevocationList`/`VerifiedHashCache`/`CorroborationTracker` plus meshd-only bookkeeping (`peer_id_of`/`pubkey_of` maps, per-peer status/heartbeat, single pending pairing code/join, monotonic `next_seq` for `CureHint::sign`); persisted to `--state PATH` as hex-pubkey JSON, 0600
+- stdin commands (`#[serde(tag="cmd")]`): `pair_start`/`pair_join`/`broadcast`/`status`/`revoke`; stdout records: `listening`/`pair_code`/`paired`/`pair_error`/`hint`/`peer`/`revoked`
+
+## Frontend backend internals (frontend/electron/backend.cjs, A -> B means A calls/uses B)
+- `startBackend(opts)` -> four `spawn`ed children via a shared `spawnLineReader` helper (readline over stdout, NDJSON parse, auto-restart on unexpected exit): `scout` (default `--libproc`, NFR-3 no-root; `TCELL_SCOUT_MODE=eslogger` wraps in best-effort `sudo -n`), `meshd` (stdin kept open for `sendMeshCommand`), ledger-client's `feed` example -- each bridged onto a plain `EventEmitter` (`'scout'|'mesh'|'ledger'`)
+- `WakeRelay` -> binds the canonical wake socket itself (the address given to `scout --wake-socket`; Scout is the client, per trigger.rs's own doc); FIFO-queues incoming `WakeSignal`s (`'wake'` event), serially spawns one ephemeral-socket Soldier per queued wake via `_deliverToFreshSoldier` -- readiness detected by matching soldier main.rs's own pre-existing stderr line `"dormant, waiting on"` (unmodified Rust side, no new marker), then connects as a client exactly like Scout's own `send_wake` (one JSON line, drop); captures Soldier's one `cure` stdout line as `'soldier'`, unlinks the ephemeral socket on child exit
+- `runTestThreat()` -> `scripts/test_threat.sh` (Phase 9 item 8), fire-and-forget
+- wired into main.cjs/preload.cjs now, real (Phase 9 item 10): `main.cjs` calls `startBackend()` in `app.whenReady()`, forwards every backend event over one generic `tcell:event` IPC channel (`{channel,payload}`) to all windows, exposes `ipcMain.handle('tcell:mesh-command'|'tcell:run-test-threat', ...)`; `preload.cjs` exposes `window.tcell.{onEvent,sendMeshCommand,runTestThreat}` (plus the pre-existing `openGenome`) to both windows (shared preload script)
+
+## Frontend live translator (frontend/src/data.js, Phase 9 item 11, A -> B means A calls/uses B)
+- `real()` (used only when `window.tcell` exists; a plain browser keeps running the untouched `simulate()`) -> `window.tcell.onEvent` dispatches by `channel` to `onScout`/`onSoldier`/`onMesh`/`onLedger`, each mapping real NDJSON fields onto the SAME `feed`/`state` contract `simulate()` already produces
+- `onScout` -> keys live incidents by `root_exe` (the only field both `Progress` and `Detection` records share -- `Detection` carries no lineage-id), reuses `WEIGHT`/`ACT_LABEL` (already defined for the sim path) to build `inc.tree.acts` from real embedded TES events
+- `onSoldier` -> on `source:'evolved'`, replays the EXISTING local `evaluate()`/`ALLELES` search (same fitness fn as allele_search.rs) seeded by the real detected schema for the step-by-step UI animation, but always finishes on Soldier's real `sequence`/`gene_hash` (a real `--benign-trace` collision this client can't see would otherwise diverge the local replay's own winner -- logged if so); registers `cure.ledger.submit_sig`/`commit_sigs` in a `pendingLedger` map for `onLedger` to resolve later, rather than faking a PoI-signature countdown
+- `onLedger` -> `signature` records resolve `pendingLedger` entries (real `cured` transition fires here, not on the cure record itself); an unrecognized signature (feed.rs doesn't decode instruction data) becomes an honest `activity` block kind; `genome` records backfill real `bytes` onto a matching gene or ingest a network-learned one
+- `onMesh` -> `pair_code` resolves `startPairing()`'s promise (nonce parsed back out of the real `uri`, since meshd doesn't send it separately); `paired`/`peer`/`revoked` drive real `state.devices` mutations, including cross-device status propagation (`sendMeshCommand({cmd:'status',...})` broadcasts this device's own phase, incoming `peer` records apply a real peer's broadcast status)
+- `startPairing`/`cancelPairing`/`revoke` (exported) dispatch on `state.source` to `live*`/`sim*` implementations; `joinByUri` (new export) is live-only
 
 ## Dependency graph (A -> B means A depends on B)
 - scout -> tes
@@ -61,8 +85,8 @@ spikes/           spike1_eslogger.sh, spike1_trigger.c, spike2_libp2p_pair.rs, s
 - ledger-client -> t_cell (path dependency on `crates/ledger-program/programs/t_cell`, `cpi` feature — a concrete cross-workspace dependency, not just an abstract "account layout/IDL" note; reuses t_cell's Anchor-generated instruction/accounts/state types directly rather than hand-encoding Borsh)
 - mesh -> ledger-client (async chain lookup, verify.rs::confirm_via_chain -- real now, not just planned). NOT tes: DATA-3's payload (message.rs's CureHint) never needed a tes::schema type, its fields are already plain [u8;32]/u64/Vec<u8> -- the "mesh -> tes" edge in overview.md's dependency sketch never materialized as an actual `use tes::...` anywhere in this crate; if that stays true through revocation.rs (Phase 6 now fully built), architecture.md's dependency line should probably just drop tes, but leaving the note here rather than silently deleting the edge without user sign-off
 - trace-capture -> tes, scout (narrow: source_eslogger::map_line only, user-approved 2026-09-26 -- not the live detection pipeline, not reader::spawn) (offline, isolated; not on hot path of scout/soldier)
-- frontend -> process/NDJSON only, no Rust linkage (electron/backend.cjs spawns each and parses stdout): scout stdout (telemetry stream), soldier stdout (`cure`), meshd stdout (My Devices status), ledger-client `feed` example stdout (ledger feed)
-- mesh -> soldier (Stage-3 regression on a received gene, FR-M-5; user-approved 2026-09-26)
+- frontend -> process/NDJSON only, no Rust linkage (electron/backend.cjs spawns each and parses stdout, real now -- Phase 9 item 9): scout stdout (telemetry stream), soldier stdout (`cure`), meshd stdout (My Devices status), ledger-client `feed` example stdout (ledger feed)
+- mesh -> soldier (meshd.rs only, real now: `soldier::regression::check` for Stage-3, `soldier::replay_target::ReplayTarget` to load `--benign-trace`, `soldier::gene_compile::apply` on Accept; user-approved 2026-09-26). lib.rs modules (identity/message/revocation/transport/verify) stay soldier-free, only the binary crosses castes -- same shape as soldier main.rs's own ledger-client edge
 - spikes -> none (throwaway, gate Phase 1+ start)
 
 ## Notes

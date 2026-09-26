@@ -2112,6 +2112,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "futures-bounded"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "91f328e7fb845fc832912fb6a34f40cf6d1888c92f974d1893a54e97b5ff542e"
+dependencies = [
+ "futures-timer",
+ "futures-util",
+]
+
+[[package]]
 name = "futures-channel"
 version = "0.3.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3085,6 +3095,7 @@ version = "0.1.0"
 dependencies = [
  "anchor-lang",
  "bincode",
+ "serde_json",
  "solana-client",
  "solana-commitment-config",
  "solana-hash 3.1.0",
@@ -3130,6 +3141,7 @@ dependencies = [
  "libp2p-noise",
  "libp2p-ping",
  "libp2p-quic",
+ "libp2p-request-response",
  "libp2p-swarm",
  "libp2p-tcp",
  "libp2p-upnp",
@@ -3329,6 +3341,28 @@ dependencies = [
  "thiserror 1.0.69",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "libp2p-request-response"
+version = "0.27.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1356c9e376a94a75ae830c42cdaea3d4fe1290ba409a22c809033d1b7dcab0a6"
+dependencies = [
+ "async-trait",
+ "futures",
+ "futures-bounded",
+ "futures-timer",
+ "libp2p-core",
+ "libp2p-identity",
+ "libp2p-swarm",
+ "rand 0.8.8",
+ "serde",
+ "serde_json",
+ "smallvec",
+ "tracing",
+ "void",
+ "web-time",
 ]
 
 [[package]]
@@ -3672,11 +3706,13 @@ dependencies = [
  "rand 0.8.8",
  "serde",
  "serde_json",
+ "sha2 0.11.0",
  "solana-client",
  "solana-commitment-config",
  "solana-keypair",
  "solana-pubkey 3.0.0",
  "solana-signer",
+ "soldier",
  "tempfile",
  "tokio",
 ]

@@ -15,7 +15,8 @@ use std::fmt;
 
 use anchor_lang::{AccountDeserialize, InstructionData, ToAccountMetas};
 use solana_client::client_error::ClientError;
-use solana_client::rpc_client::RpcClient;
+use solana_client::rpc_client::{GetConfirmedSignaturesForAddress2Config, RpcClient};
+use solana_client::rpc_response::RpcConfirmedTransactionStatusWithSignature;
 use solana_commitment_config::CommitmentConfig;
 use solana_keypair::Keypair;
 use solana_message::Message;
@@ -192,6 +193,39 @@ impl LedgerClient {
     /// ledger-client per architecture.md), noted not solved here.
     pub fn fetch_genome_registry(&self, threat_id: [u8; 32]) -> Result<Option<t_cell::GenomeRegistry>, LedgerError> {
         self.fetch(self.genome_registry_pda(threat_id))
+    }
+
+    /// FR-L-5: light-client read of this program's recent transaction
+    /// signatures (submit_threat/commit_gene/suppress_gene calls), newest
+    /// first -- raw material for a ledger activity feed. One RPC page only
+    /// (no cursor), matching this client's existing sync, no-pagination
+    /// style; `commitment: None` falls back to this client's own configured
+    /// commitment rather than overriding it.
+    pub fn recent_signatures(
+        &self,
+        limit: usize,
+    ) -> Result<Vec<RpcConfirmedTransactionStatusWithSignature>, LedgerError> {
+        let config = GetConfirmedSignaturesForAddress2Config {
+            before: None,
+            until: None,
+            limit: Some(limit),
+            commitment: None,
+        };
+        self.rpc.get_signatures_for_address_with_config(&self.program_id, config).map_err(LedgerError::Rpc)
+    }
+
+    /// FR-L-4/L-5: enumerates every Genome Registry account this program
+    /// owns. `get_program_accounts` returns every PDA the program owns
+    /// (ThreatRegistry and GenomeRegistry mixed, since both live under the
+    /// same program id) -- a ThreatRegistry account's discriminator makes
+    /// `GenomeRegistry::try_deserialize` fail cleanly, so it's silently
+    /// skipped rather than treated as an error.
+    pub fn all_genomes(&self) -> Result<Vec<t_cell::GenomeRegistry>, LedgerError> {
+        let accounts = self.rpc.get_program_accounts(&self.program_id).map_err(LedgerError::Rpc)?;
+        Ok(accounts
+            .into_iter()
+            .filter_map(|(_, account)| t_cell::GenomeRegistry::try_deserialize(&mut account.data.as_slice()).ok())
+            .collect())
     }
 
     fn fetch<T: AccountDeserialize>(&self, pda: Pubkey) -> Result<Option<T>, LedgerError> {

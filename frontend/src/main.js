@@ -1,5 +1,5 @@
 import gsap from 'gsap';
-import { feed, state, inject, suppress, ALLELES, ACT_LABEL, evaluate, startPairing, cancelPairing, revoke } from './data.js';
+import { feed, state, inject, suppress, ALLELES, ACT_LABEL, evaluate, startPairing, cancelPairing, revoke, joinByUri } from './data.js';
 import QRCode from 'qrcode';
 import { createHelix } from './helix.js';
 import { createMesh, LABEL, GLYPH } from './mesh.js';
@@ -11,6 +11,12 @@ const short = (h) => (h ? `${h.slice(0, 6)}…${h.slice(-4)}` : '—');
 const nameOf = (id) => state.devices.find((d) => d.id === id)?.name ?? 'Another network';
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
 const COLOR = { clean: '#4ff5d2', watching: '#ffc46b', isolated: '#ff3b5c', cured: '#8f7bff' };
+
+// state.source is set once, synchronously, before this module's top-level code runs.
+const sourceBadge = $('#source-badge');
+sourceBadge.hidden = false;
+sourceBadge.textContent = state.source === 'live' ? 'Live' : 'Simulated';
+sourceBadge.dataset.source = state.source;
 
 function ago(ms) {
   const s = Math.max(0, Math.round((Date.now() - ms) / 1000));
@@ -122,7 +128,8 @@ function openDialog(step) {
   pairStep(step);
 }
 async function beginPairing() {
-  const code = startPairing();
+  $('#show-join').hidden = state.source !== 'live'; // no real peer to join against in simulated mode
+  const code = await startPairing();
   // Light modules on dark: phone cameras read either, and this keeps the panel from flashing white.
   $('#pair-qr').innerHTML = await QRCode.toString(code.uri, { type: 'svg', margin: 0, errorCorrectionLevel: 'M', color: { dark: '#e6eef0', light: '#0000' } });
   $('#pair-hex').textContent = code.nonce.match(/.{4}/g).join(' ');
@@ -142,6 +149,8 @@ function closePairing() {
   stopPairClock();
   cancelPairing();
   removing = null;
+  $('#join-uri').value = '';
+  $('#join-wait').hidden = true;
   if (!pairDlg.open) return;
   if (reduced) return pairDlg.close();
   gsap.to(pairDlg, { opacity: 0, scale: 0.97, duration: 0.2, ease: 'power2.in', onComplete: () => (pairDlg.close(), gsap.set(pairDlg, { clearProps: 'opacity,scale' })) });
@@ -154,6 +163,14 @@ pairDlg.addEventListener('click', (e) => {
   if (act === 'cancel') closePairing();
   if (act === 'restart') beginPairing();
   if (act === 'copy') navigator.clipboard?.writeText($('#pair-hex').textContent.replace(/ /g, '')).then(() => ($('#pair-copy').textContent = 'Copied'));
+  if (act === 'show-join') pairStep('join');
+  if (act === 'join') {
+    const uri = $('#join-uri').value.trim();
+    if (!uri) return;
+    stopPairClock();
+    $('#join-wait').hidden = false;
+    joinByUri(uri);
+  }
   if (act === 'revoke') {
     revoke(removing);
     closePairing();
