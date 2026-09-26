@@ -53,8 +53,11 @@
 - [ ] crates/trace-capture/src/main.rs — runs in sandbox_init/sandbox-exec (macOS) or free-tier Linux VM (other atomics), captures ART atomic -> TES trace, not on demo/evolution-loop path (FR-R-5/8)
 
 ## Phase 8 — Dashboard (consumes Scout telemetry, ledger-client feed, Mesh status; last)
-- [ ] dashboard/src/App.tsx — Tauri+React+Vite shell, read-only (FR-U-1)
-- [ ] dashboard/src/TelemetryView.tsx — live telemetry view (FR-U-1)
-- [ ] dashboard/src/LedgerFeed.tsx — ledger feed view (FR-U-1)
-- [ ] dashboard/src/MyDevices.tsx — per-device status (clean/watching/isolated/cured) + heartbeat + mesh threat propagation (FR-U-2)
+- [x] dashboard location/stack diverges from overview.md FR-U-1 "Tauri + React + Vite": built as `frontend/` = Electron + vanilla JS + Vite (gsap, three), not `dashboard/` Tauri+React; overview.md not yet updated to match (needs user approval)
+- [x] frontend/electron/main.cjs (+ preload.cjs) — Electron shell, read-only; main window (index.html) + separate "Global genome" window (genome.html) via `window.tcell.openGenome()` IPC (FR-U-1) (dev = `npm run dev`, Vite on :5174)
+- [x] frontend/src/data.js — single UI data source: `feed` EventTarget + `state`, events devices/genes/block/mesh/incident/stats/log (NOT wired to backend: everything under `simulate()` is fake — 5 hardcoded devices, random hashes/slots, mock threats reusing Stage-1 weights/ATT&CK ids; backend link = replace `simulate()` with Scout stdout / ledger-client / mesh feeds emitting the same events; no revisit scheduled)
+- [x] frontend/src/main.js (+ index.html, style.css) — standard view (health ring, home network mesh, immune memory helix, your contributions) + advanced view (terminal log filtered by src tes/scout/soldier/ledger/mesh, system CPU/mem/events-per-s sparklines, pipeline lag + reader drops + seq gaps (NFR-7 counters), watched lineages, lymph-node peers table w/ status + heartbeat, ledger feed) (FR-U-1, FR-U-2) (all values from simulated data.js)
+- [x] frontend/src/mesh.js — My Devices SVG graph, status clean/watching/isolated/cured with plain-language labels, `propagate(from,to)` animates a cure hint across the lymph network (FR-U-2) (simulated; Phase 6 mesh unbuilt)
+- [x] frontend/src/helix.js — three.js + bloom helix rendering gene hashes as blocks (visual only, not in overview.md)
+- [x] frontend/src/genome.js (+ genome.html) — global genome window: helix of chain gene commits + global stats, driven by `block` events (simulated ledger, not ledger-client)
 </content>
