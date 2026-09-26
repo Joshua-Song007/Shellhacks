@@ -104,8 +104,9 @@ fn submit_threat_creates_registry_and_dedupes_by_reporter() {
 #[ignore]
 fn fetch_threat_registry_of_an_unreported_threat_is_none() {
     let client = client();
-    assert!(client.fetch_threat_registry([99u8; 32]).unwrap().is_none());
-    assert!(client.fetch_genome_registry([99u8; 32]).unwrap().is_none());
+    let threat_id = fresh_threat_id();
+    assert!(client.fetch_threat_registry(threat_id).unwrap().is_none());
+    assert!(client.fetch_genome_registry(threat_id).unwrap().is_none());
 }
 
 #[test]
@@ -116,7 +117,7 @@ fn commit_gene_forces_a_real_multi_chunk_upload() {
     let committee_keys = poi_committee();
     let committee: Vec<&Keypair> = committee_keys.iter().collect();
 
-    let threat_id = [23u8; 32];
+    let threat_id = fresh_threat_id();
     let gene_hash = [24u8; 32];
     // Deliberately over ledger_client::client::MAX_CHUNK_BYTES so this must
     // take >1 commit_gene call -- litesvm's tests never hit this path.
@@ -139,7 +140,7 @@ fn suppress_gene_requires_poi_and_sets_epigenetic_status() {
     let committee_keys = poi_committee();
     let committee: Vec<&Keypair> = committee_keys.iter().collect();
 
-    let threat_id = [25u8; 32];
+    let threat_id = fresh_threat_id();
     client.commit_gene(payer, &committee, threat_id, [26u8; 32], &[1, 2, 3]).unwrap();
     assert!(!client.fetch_genome_registry(threat_id).unwrap().unwrap().epigenetic_status);
 

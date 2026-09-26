@@ -13,7 +13,7 @@ crates/
   ledger-program/ Anchor.toml, keys/ (gitignored, 5 devnet PoI keypairs), programs/t_cell/
                   src/{constants.rs, error.rs, state.rs, poi.rs, instructions.rs, instructions/{submit_threat.rs, commit_gene.rs, suppress_gene.rs}, lib.rs}
                   tests/test_instructions.rs (litesvm, no local-validator/Node dependency)
-  ledger-client/  client.rs
+  ledger-client/  lib.rs, client.rs, examples/devnet_smoke.rs (manual verification, not run in CI), tests/integration.rs (#[ignore]'d, needs a local solana-test-validator)
   mesh/           identity.rs, transport.rs, message.rs, verify.rs, revocation.rs
   trace-capture/  main.rs
 dashboard/        App.tsx, TelemetryView.tsx, LedgerFeed.tsx, MyDevices.tsx
@@ -49,11 +49,16 @@ spikes/           spike1_eslogger.sh, spike1_trigger.c, spike2_libp2p_pair.rs, s
 - lib.rs -> declares constants/error/instructions/poi/state; #[program] block is thin wiring to each instructions/*.rs handle_* fn
 - tests/test_instructions.rs -> litesvm (loads the built .so directly, no anchor-cli/local-validator/Node needed at test time) + the 5 devnet keypairs under keys/ (gitignored) for PoI-signing scenarios
 
+## Ledger client internals (A -> B means A calls/uses B)
+- client.rs -> t_cell::{instruction, accounts, state, ID, THREAT_SEED, GENOME_SEED, MAX_GENE_BYTES} (Anchor-generated types, reused directly rather than hand-encoded); anchor_lang::solana_program::{instruction::Instruction, system_program} (t_cell has no own solana_program re-export, goes through anchor-lang); solana_client::rpc_client::RpcClient (sync/blocking — matches the rest of this project, no async runtime anywhere yet); own MAX_CHUNK_BYTES=400 (independently declared, no dependency edge onto soldier's gene_compile.rs, which has a *different* ~900B constant for a *different* concern — compiled gene size, not tx-chunk size)
+- lib.rs -> client (module declaration + re-export only)
+- examples/devnet_smoke.rs, tests/integration.rs -> client::LedgerClient (public API only); integration.rs also directly constructs its own RpcClient for test-only airdrops (not part of LedgerClient's real surface — production clients don't fund themselves)
+
 ## Dependency graph (A -> B means A depends on B)
 - scout -> tes
 - soldier -> tes, scout (wake-signal contract plus a handful of scout::scoring's pure, stateless helpers — `WakeSignal`, `Action`, `exec_actions`, `BURST_WINDOW_NS`, `BURST_OPS` — never Scorer/lineage/host-detection internals)
 - ledger-program -> (none internal; standalone Anchor program)
-- ledger-client -> ledger-program (account layout/IDL)
+- ledger-client -> t_cell (path dependency on `crates/ledger-program/programs/t_cell`, `cpi` feature — a concrete cross-workspace dependency, not just an abstract "account layout/IDL" note; reuses t_cell's Anchor-generated instruction/accounts/state types directly rather than hand-encoding Borsh)
 - mesh -> tes (DATA-3 payload), ledger-client (async chain lookup)
 - trace-capture -> tes (offline, isolated; not on hot path of scout/soldier)
 - dashboard -> scout (telemetry stream), ledger-client (ledger feed), mesh (My Devices status)
@@ -65,6 +70,6 @@ spikes/           spike1_eslogger.sh, spike1_trigger.c, spike2_libp2p_pair.rs, s
 - Scout I/O: stdout = NDJSON `{"type":"detection"|"stats",…}` records (dashboard input); wake signals go to Soldier as one JSON line per connection on the `--wake-socket` Unix stream.
 - reader.rs (scout) sits between source_eslogger.rs's stdout and tes::validate; decouples pipe read from parse so a slow parser can't backpressure the OS pipe (FR-D-7a); its drop counter + validate.rs's seq-gap counter are the two observable-loss signals required by NFR-7.
 - source_beacon.rs is intentionally outside the tes/Pipeline dependency graph: TES v1 (DATA-1) models a lossless, nanosecond-precision event stream, and an `lsof -i` poll is neither (see plan.md). Its findings are their own `network_finding` stdout record, un-scored and never fed to `Pipeline`; NFR-7's loss counters do not apply to it (it has its own `beacon` stats key instead: snapshots/lsof_errors/new_sightings/findings).
-- gene payloads are chunked across multiple tx per CON-9/FR-R-9 whenever they exceed the ~900B post-overhead budget; ledger-client owns the chunking orchestration, ledger-program's commit_gene accepts either a single write or a sequence of appends into the same fixed-size (4096B) Genome Registry PDA.
+- gene payloads are chunked across multiple tx per CON-9/FR-R-9 whenever they exceed ledger-client's MAX_CHUNK_BYTES=400 budget; ledger-client owns the chunking orchestration, ledger-program's commit_gene accepts either a single write or a sequence of appends into the same fixed-size (4096B) Genome Registry PDA. 400, not overview.md's ~900B guideline: measured empirically during Phase 5 that commit_gene's 8-account/6-signature shape (payer + genome_registry + system_program + 5 required PoI signers) carries a constant 799B of per-transaction overhead regardless of chunk length — a real 1232B-cap rejection from a live validator caught this; overview.md's figure assumed a much cheaper, few-signer instruction shape.
 - allele_search.rs's allele->action mapping and cost table are invented (overview.md specifies no allele physics, FR-R-6 real alleles are unimplemented); the search is fitness-based (containment_value - stability_cost, including a benign-action collision penalty), not gated on full containment, so it can legally return the empty sequence — see plan.md's note on that item.
 </content>
