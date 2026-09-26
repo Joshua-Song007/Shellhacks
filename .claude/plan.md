@@ -86,5 +86,4 @@
 - [ ] Post-advisor lockdown — `tcell-db` Trusted Sources = advisor app only (remove dev IP); replace model key with a VPC-restricted one, delete old; verify: Gemma test call succeeds from advisor app env (not local), measure narration latency
 - [ ] frontend/electron/backend.cjs — advisor relay: POST signed records to advisor HTTPS endpoint; dashboard fails open (narration/trend panel absent if advisor unreachable, never blocks demo path)
 - [ ] DMG packaging — Electron packaging step bundling scout/meshd/soldier binaries (set up early to surface bundling/Gatekeeper/root issues; final build only when app done) -> upload to `tcell-downloads`, object Public -> point website `data-download` links (currently `#`) at CDN URL; verify unauthenticated CDN download
-- [ ] Loose ends — confirm billing alerts $50/$100 active; delete `.github/workflows/deploy-website.yml` + teammate (repo owner) disables GitHub Pages
-- [ ] Post-hackathon teardown — destroy `tcell-db` first (~$15/mo, only meaningful ongoing cost); keep static site + Spaces (~$5/mo) if project continues
+
