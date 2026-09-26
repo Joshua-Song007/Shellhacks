@@ -1,7 +1,7 @@
 import gsap from 'gsap';
-import { feed, state, inject, suppress, ALLELES, evaluate } from './data.js';
+import { feed, state, inject, suppress, ALLELES, ACT_LABEL, evaluate, startPairing, cancelPairing, confirmPairing, fingerprint } from './data.js';
 import { createHelix } from './helix.js';
-import { createMesh, LABEL } from './mesh.js';
+import { createMesh, LABEL, GLYPH } from './mesh.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -47,17 +47,23 @@ document.fonts.ready.then(() => placePill($('.modes [aria-selected="true"]'), fa
 // ---------- Health ring (one segment per device) ----------
 const R = 108;
 const C = 2 * Math.PI * R;
-const segs = state.devices.map((d, i) => {
-  const gap = 10;
-  const len = C / state.devices.length - gap;
-  const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-  Object.entries({ cx: 130, cy: 130, r: R, 'stroke-dasharray': `${len} ${C - len}`, 'stroke-dashoffset': -(i * C) / state.devices.length - gap / 2 }).forEach(([k, v]) => c.setAttribute(k, v));
-  c.style.stroke = c.style.color = COLOR.clean;
-  $('#ring-segs').append(c);
-  const t = document.createElementNS('http://www.w3.org/2000/svg', 'title');
-  c.append(t);
-  return { c, t };
-});
+let segs = [];
+// Rebuilt whenever a device joins, so there is always one segment per device.
+function buildRing() {
+  $('#ring-segs').replaceChildren();
+  segs = state.devices.map((d, i) => {
+    const gap = 10;
+    const len = C / state.devices.length - gap;
+    const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    Object.entries({ cx: 130, cy: 130, r: R, 'stroke-dasharray': `${len} ${C - len}`, 'stroke-dashoffset': -(i * C) / state.devices.length - gap / 2 }).forEach(([k, v]) => c.setAttribute(k, v));
+    c.style.stroke = c.style.color = COLOR[d.status];
+    $('#ring-segs').append(c);
+    const t = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+    c.append(t);
+    return { c, t };
+  });
+}
+buildRing();
 if (!reduced) gsap.to('.ring-orbit', { rotation: 360, svgOrigin: '130 130', duration: 90, repeat: -1, ease: 'none' });
 
 const COPY = {
@@ -68,6 +74,7 @@ const COPY = {
 };
 let phase = 'clean';
 function renderHealth() {
+  if (segs.length !== state.devices.length) buildRing();
   const safe = state.devices.filter((d) => d.status === 'clean' || d.status === 'cured').length;
   state.devices.forEach((d, i) => {
     gsap.to(segs[i].c, { stroke: COLOR[d.status], color: COLOR[d.status], duration: 0.6 });
@@ -92,6 +99,70 @@ function renderHealth() {
 
 // ---------- Mesh ----------
 const mesh = createMesh($('#mesh'), state.devices, state.self, { reduced });
+
+// ---------- Add a trusted device (FR-M-1 pairing) ----------
+const pairDlg = $('#pair');
+let pairTimer = 0;
+let pairBar = null;
+function pairStep(step) {
+  pairDlg.querySelectorAll('.pair-step').forEach((s) => (s.hidden = s.dataset.step !== step));
+  const shown = pairDlg.querySelector(`[data-step="${step}"]`);
+  if (!reduced) gsap.fromTo(shown.children, { opacity: 0, y: 8 }, { opacity: 1, y: 0, duration: 0.45, ease: 'power3.out', stagger: 0.05, overwrite: true });
+  shown.querySelector('footer .btn, footer button')?.focus();
+}
+function stopPairClock() {
+  clearInterval(pairTimer);
+  pairBar?.kill();
+}
+function beginPairing() {
+  const { code, expires } = startPairing();
+  const pc = $('#pair-code');
+  pc.setAttribute('aria-label', `Pairing code ${code.split('').join(' ')}`);
+  pc.innerHTML = [...code].map((c, i) => `<span${i === 3 ? ' class="gap"' : ''}>${c}</span>`).join('');
+  stopPairClock();
+  const left = () => {
+    const s = Math.max(0, Math.ceil((expires - Date.now()) / 1000));
+    $('#pair-left').textContent = `Expires in ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  };
+  left();
+  pairTimer = setInterval(left, 1000);
+  pairBar = gsap.fromTo('#pair-bar', { scaleX: 1 }, { scaleX: 0, duration: (expires - Date.now()) / 1000, ease: 'none' });
+  pairStep('code');
+  if (!reduced) gsap.fromTo(pc.children, { opacity: 0, y: 14, rotateX: -70 }, { opacity: 1, y: 0, rotateX: 0, duration: 0.6, ease: 'back.out(2)', stagger: 0.06, delay: 0.15 });
+}
+function closePairing() {
+  stopPairClock();
+  cancelPairing();
+  if (!pairDlg.open) return;
+  if (reduced) return pairDlg.close();
+  gsap.to(pairDlg, { opacity: 0, scale: 0.97, duration: 0.2, ease: 'power2.in', onComplete: () => (pairDlg.close(), gsap.set(pairDlg, { clearProps: 'opacity,scale' })) });
+}
+$('#add-device').addEventListener('click', () => {
+  pairDlg.showModal();
+  if (!reduced) gsap.fromTo(pairDlg, { opacity: 0, scale: 0.96, y: 10 }, { opacity: 1, scale: 1, y: 0, duration: 0.45, ease: 'expo.out' });
+  beginPairing();
+});
+pairDlg.addEventListener('cancel', (e) => (e.preventDefault(), closePairing())); // Esc
+pairDlg.addEventListener('click', (e) => {
+  if (e.target === pairDlg) return closePairing(); // backdrop
+  const act = e.target.closest('[data-act]')?.dataset.act;
+  if (act === 'cancel') closePairing();
+  if (act === 'restart') beginPairing();
+  if (act === 'trust' || act === 'reject') {
+    confirmPairing(act === 'trust');
+    closePairing();
+  }
+});
+feed.addEventListener('pair', ({ detail }) => {
+  if (!pairDlg.open) return;
+  stopPairClock();
+  if (detail.phase === 'expired') return pairStep('expired');
+  const d = detail.device;
+  $('#pair-ask').textContent = `Trust ${d.name}?`;
+  $('#pair-glyph').setAttribute('d', GLYPH[d.kind]);
+  $('#pair-words').innerHTML = fingerprint(d.pubkey).map((w) => `<li>${w}</li>`).join('');
+  pairStep('confirm');
+});
 
 // ---------- Local genome helix ----------
 const probe = $('#local-probe');
@@ -211,7 +282,6 @@ function renderLedger() {
 
 // ---------- Threat response: time to immunity, lineage tree, allele search, suppress ----------
 const STEPS = [['detect', 'Frozen'], ['gene', 'Cure evolved'], ['regress', 'Apps checked'], ['commit', 'On chain'], ['immune', 'Home immune']];
-const ACT_LABEL = { ExecFromTempOrCache: 'Ran from a temp folder', RecoverySnapshotTamper: 'Deleted backups', RapidFileModBurst: 'Mass file rewrite' };
 const base = (p) => p.split('/').pop();
 const sign = (n) => (n >= 0 ? `+${n}` : `${n}`);
 const alleleNames = (mask) => ALLELES.filter((_, i) => mask & (1 << i)).map((a) => a.label);

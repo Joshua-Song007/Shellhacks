@@ -14,7 +14,8 @@ const ease = (t) => t * t * (3 - 2 * t);
 const baseOf = (hash) => 'ATGC'[parseInt(hash.slice(0, 2), 16) % 4];
 
 // bg = null renders transparent so the panel shows through; `length` is how much of the box the strand spans (>1 runs off the edges).
-export function createHelix(canvas, { hashes, capacity = 160, tilt = 0, bg = null, length = 0.86, thickness = 0.55, particles = 300, reduced = false, onHover = () => {} }) {
+// edgeScroll: hovering the top/bottom band of the box scrolls along the strand (and so does the wheel); onSelect(hit) fires on a block click.
+export function createHelix(canvas, { hashes, capacity = 160, tilt = 0, bg = null, length = 0.86, thickness = 0.55, particles = 300, reduced = false, edgeScroll = false, onHover = () => {}, onSelect = null, onEdge = () => {} }) {
   const SP = 0.34;
   const R = 0.62;
   const TWIST = 0.36;
@@ -121,6 +122,10 @@ export function createHelix(canvas, { hashes, capacity = 160, tilt = 0, bg = nul
   const centers = Array.from({ length: N }, () => new THREE.Vector3());
   const pointer = { x: 0, y: 0, nx: 0, ny: 0, active: false };
   let hover = -1;
+  let pinned = -1; // selected block, held popped out while its details are open
+  let scroll = 0; // strand-local offset along the axis
+  let wheel = 0;
+  let edge = 0; // -1 bottom band, 1 top band, 0 neither
   let phase = 0;
   let w = 1;
   let h = 1;
@@ -155,6 +160,13 @@ export function createHelix(canvas, { hashes, capacity = 160, tilt = 0, bg = nul
     pointer.active = true;
   });
   canvas.addEventListener('pointerleave', () => (pointer.active = false));
+  if (edgeScroll) canvas.addEventListener('wheel', (e) => (wheel -= e.deltaY * 0.004), { passive: true });
+  if (onSelect)
+    canvas.addEventListener('click', () => {
+      if (hover < 0) return;
+      const [x, y] = screenOf(tmp.copy(centers[hover]).applyMatrix4(root.matrixWorld));
+      onSelect({ index: hover, x, y, color: `#${colBlock[hover].getHexString()}` });
+    });
 
   function screenOf(v) {
     tmp.copy(v).project(camera);
@@ -180,6 +192,18 @@ export function createHelix(canvas, { hashes, capacity = 160, tilt = 0, bg = nul
     fit += (Math.min((across * thickness) / (R * 2), (along * length) / Math.max(1, count * SP)) - fit) * Math.min(1, dt * 3);
     root.scale.setScalar(fit);
 
+    if (edgeScroll) {
+      // Depth into the top/bottom 16% band sets the speed; clamp so the strand's ends stop at the box edge.
+      const band = 0.16 * h;
+      const depth = !pointer.active ? 0 : pointer.y < band ? 1 - pointer.y / band : pointer.y > h - band ? -(1 - (h - pointer.y) / band) : 0;
+      const e = Math.sign(depth);
+      if (e !== edge) onEdge((edge = e));
+      const max = Math.max(0, ((count - 1) / 2) * SP + SP * 2 - along / 2 / fit);
+      scroll += ease(Math.abs(depth)) * Math.sign(depth) * dt * 4.5 + wheel;
+      wheel = 0;
+      scroll = Math.min(max, Math.max(-max, scroll));
+    }
+
     camera.position.x += ((pointer.active ? pointer.nx : 0) * 0.5 - camera.position.x) * 0.04;
     camera.position.y += ((pointer.active ? -pointer.ny : 0) * 0.35 - camera.position.y) * 0.04;
     camera.lookAt(0, 0, 0);
@@ -187,29 +211,34 @@ export function createHelix(canvas, { hashes, capacity = 160, tilt = 0, bg = nul
     root.updateMatrixWorld();
 
     let best = -1;
+    let hoverD = Infinity;
     let bestD = 60;
     if (pointer.active && intro.t >= 1) {
       for (let i = 0; i < count; i++) {
-        const [sx, sy] = screenOf(tmp.copy(centers[i]).applyMatrix4(root.matrixWorld));
+        // Hit-test the un-popped axis point: a popped block slides toward the camera, which would move its target under the cursor.
+        const [sx, sy] = screenOf(tmp.set(0, centers[i].y, 0).applyMatrix4(root.matrixWorld));
         const d = Math.hypot(sx - pointer.x, sy - pointer.y);
+        if (i === hover) hoverD = d;
         if (d < bestD) {
           bestD = d;
           best = i;
         }
       }
     }
-    if (best !== -1 && hover !== -1 && Math.abs(best - hover) <= 1) best = hover;
+    if (best !== -1 && hoverD - bestD < 4) best = hover; // a few px of hysteresis, so every neighbour stays reachable
+    if (edge) best = -1; // scrolling, not pointing
     hover = best;
 
     const half = (count - 1) / 2;
     for (let i = 0; i < count; i++) {
       const build = born[i] < 0 ? ease(clamp01((intro.t * (count + 8) - i) / 8)) : ease(clamp01((t - born[i]) / 1.2));
-      const hv = hover >= 0 ? clamp01(1 - (Math.abs(i - hover) - 1) / 3) : 0;
+      const focus = pinned >= 0 ? pinned : hover;
+      const hv = focus >= 0 ? clamp01(1 - (Math.abs(i - focus) - 1) / 3) : 0;
       mix[i] += (hv - mix[i]) * Math.min(1, dt * (reduced ? 12 : 6));
       flash[i] *= 1 - Math.min(1, dt * 1.2);
       const e = ease(mix[i]);
 
-      const ay = (i - half) * SP;
+      const ay = (i - half) * SP - scroll;
       const a = i * TWIST + phase;
       const pop = e * 0.35;
       pA.set(Math.cos(a) * R, ay, Math.sin(a) * R).lerp(tmp.set(-CUBE * 0.5 - 0.02, ay, pop), e);
@@ -228,17 +257,18 @@ export function createHelix(canvas, { hashes, capacity = 160, tilt = 0, bg = nul
       m4.compose(tmp.addVectors(pA, pB).multiplyScalar(0.5), q, s.set(build * (1 - e), len, build * (1 - e)));
       rungs.setMatrixAt(i, m4);
 
-      const bs = CUBE * Math.max(e, flash[i]) * build * (1 + (i === hover ? 0.25 : 0));
+      const bs = CUBE * Math.max(e, flash[i]) * build * (1 + (i === hover || i === pinned ? 0.25 : 0));
       q.setFromEuler(euler.set(0, a * (1 - e), 0));
       m4.compose(tmp.set(0, ay, pop), q, s.setScalar(bs));
       blocks.setMatrixAt(i, m4);
-      col.copy(colBlock[i]).multiplyScalar(1 + (i === hover ? 1.2 : 0) + flash[i] * 2.5);
+      col.copy(colBlock[i]).multiplyScalar(1 + (i === hover || i === pinned ? 1.2 : 0) + flash[i] * 2.5);
       blocks.setColorAt(i, col);
     }
     nodes.instanceMatrix.needsUpdate = rungs.instanceMatrix.needsUpdate = blocks.instanceMatrix.needsUpdate = true;
     blocks.instanceColor.needsUpdate = true;
 
-    if (hover >= 0 && mix[hover] > 0.6) {
+    canvas.style.cursor = onSelect && hover >= 0 ? 'pointer' : edge ? (edge > 0 ? 'n-resize' : 's-resize') : '';
+    if (hover >= 0 && hover !== pinned && mix[hover] > 0.6) {
       const [sx, sy] = screenOf(tmp.copy(centers[hover]).applyMatrix4(root.matrixWorld));
       onHover({ index: hover, x: sx, y: sy, base: seq[hover] + PAIR[seq[hover]] });
     } else onHover(null);
@@ -256,6 +286,13 @@ export function createHelix(canvas, { hashes, capacity = 160, tilt = 0, bg = nul
     },
     pulse(i = (Math.random() * count) | 0) {
       flash[i] = 1;
+    },
+    // Hold block i popped out (-1 releases). Returns its current screen position.
+    pin(i) {
+      pinned = i;
+      if (i < 0) return null;
+      const [x, y] = screenOf(tmp.copy(centers[i]).applyMatrix4(root.matrixWorld));
+      return { x, y };
     },
   };
 }

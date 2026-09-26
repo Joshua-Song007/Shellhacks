@@ -429,11 +429,14 @@ export function createHelix(canvas, { reduced = false, onHover = () => {} } = {}
 
     // Hover pick: nearest pair centre on screen
     let best = -1;
+    let hoverD = Infinity;
     let bestD = mobile ? 70 : 95;
     if (pointer.active && state.build > 0.95) {
       for (let i = 0; i < N; i++) {
-        const [sx, sy] = screenOf(tmp.copy(centers[i]).applyMatrix4(root.matrixWorld));
+        // Hit-test the un-popped axis point: a popped block slides toward the camera, which would move its target under the cursor.
+        const [sx, sy] = screenOf(tmp.set(0, centers[i].y, 0).applyMatrix4(root.matrixWorld));
         const d = Math.hypot(sx - pointer.x, sy - pointer.y);
+        if (i === hover) hoverD = d;
         if (d < bestD) {
           bestD = d;
           best = i;
@@ -441,7 +444,7 @@ export function createHelix(canvas, { reduced = false, onHover = () => {} } = {}
       }
     }
     // Stickiness avoids flicker between neighbours
-    if (best !== -1 && hover !== -1 && Math.abs(best - hover) <= 1) best = hover;
+    if (best !== -1 && hoverD - bestD < 4) best = hover; // a few px of hysteresis, so every neighbour stays reachable
     if (best !== hover) hover = best;
 
     const half = (N - 1) / 2;

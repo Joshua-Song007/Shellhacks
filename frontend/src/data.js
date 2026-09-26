@@ -9,6 +9,7 @@
 //   'stats'    state.stats / state.lineages refreshed
 //   'log'      detail = { t, src: 'tes'|'scout'|'soldier'|'ledger'|'mesh', level: 'info'|'warn'|'alert'|'ok', msg }
 //   'threat'   state.incident changed (lineage tree, allele search, time-to-immunity marks, suppression)
+//   'pair'     detail = { phase: 'request', device } a device entered this device's pairing code | { phase: 'expired' }
 
 export const feed = new EventTarget();
 const emit = (type, detail) => feed.dispatchEvent(new CustomEvent(type, { detail }));
@@ -45,6 +46,7 @@ export const THREATS = [
   { name: 'Fake installer encrypting files', actions: ['ExecFromTempOrCache', 'RapidFileModBurst', 'RecoverySnapshotTamper'], exe: '/Users/Shared/Library/Caches/setup_helper', parent: '/System/Library/CoreServices/Finder.app/Contents/MacOS/Finder' },
 ];
 export const WEIGHT = { ExecFromTempOrCache: 20, RecoverySnapshotTamper: 50, RapidFileModBurst: 40 };
+export const ACT_LABEL = { ExecFromTempOrCache: 'Ran from a temp folder', RecoverySnapshotTamper: 'Deleted backups', RapidFileModBurst: 'Mass file rewrite' };
 export const ATTACK = { ExecFromTempOrCache: 'T1204', RecoverySnapshotTamper: 'T1490', RapidFileModBurst: 'T1486' };
 
 // Mirrors crates/soldier/src/allele_search.rs: same 5 alleles in bit order, same costs and coverage.
@@ -222,6 +224,53 @@ export async function suppress() {
   emit('mesh', { from: state.self, to: others });
   for (const id of others) log('mesh', 'ok', `${device(id).name}: epigenetic=suppressed, gene ${inc.gene.slice(0, 8)}… halted`);
   changed();
+}
+
+// ---------- Pairing (FR-M-1): one-time code, 5 min expiry, the new device's Ed25519 pubkey joins the household ----------
+// ponytail: simulated; Phase 6 mesh (crates/mesh identity.rs) is unbuilt. A "new device" enters the code a few seconds in.
+export const PAIR_TTL = 5 * 60_000;
+const NEW_DEVICES = [
+  { name: 'Guest MacBook Air', kind: 'laptop' },
+  { name: 'Office iMac', kind: 'desktop' },
+  { name: 'Garage device mini', kind: 'mini' },
+  { name: 'Living room iMac', kind: 'desktop' },
+];
+// Short word list for comparing key fingerprints by eye (both screens show the same 4 words).
+const WORDS = ['amber', 'cedar', 'delta', 'ember', 'fjord', 'grove', 'harbor', 'iris', 'juniper', 'kelp', 'lumen', 'maple', 'nectar', 'orbit', 'pebble', 'quartz'];
+export const fingerprint = (pubkey) => [0, 2, 4, 6].map((i) => WORDS[parseInt(pubkey.slice(i, i + 2), 16) % WORDS.length]);
+
+let pairing = null;
+export function startPairing() {
+  cancelPairing();
+  const code = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1_000_000).padStart(6, '0');
+  const p = (pairing = { code, expires: Date.now() + PAIR_TTL, candidate: null });
+  const left = NEW_DEVICES.filter((n) => !state.devices.some((d) => d.name === n.name));
+  log('mesh', 'info', `pairing code issued, expires in 5 min`);
+  p.timer = setTimeout(() => {
+    if (pairing !== p || !left.length) return;
+    const n = pick(left);
+    p.candidate = { ...n, id: `dev-${hex(3)}`, pubkey: hex(32) };
+    log('mesh', 'info', `${n.name} presented code; pubkey ${p.candidate.pubkey.slice(0, 12)}… awaiting approval`);
+    emit('pair', { phase: 'request', device: p.candidate });
+  }, rand(3500, 6000));
+  p.expiry = setTimeout(() => pairing === p && (cancelPairing(), emit('pair', { phase: 'expired' })), PAIR_TTL);
+  return { code, expires: p.expires };
+}
+export function cancelPairing() {
+  if (!pairing) return;
+  clearTimeout(pairing.timer);
+  clearTimeout(pairing.expiry);
+  pairing = null;
+}
+export function confirmPairing(trust) {
+  const c = pairing?.candidate;
+  cancelPairing();
+  if (!c) return;
+  if (!trust) return log('mesh', 'warn', `${c.name} rejected; pubkey not recorded`);
+  state.devices.push({ ...c, status: 'clean', heartbeat: Date.now() });
+  log('mesh', 'ok', `${c.name} paired; pubkey ${c.pubkey.slice(0, 12)}… added to household roster`);
+  emit('devices', state.devices);
+  setTimeout(() => emit('mesh', { from: state.self, to: [c.id] }), 1200); // hand the new node the current immune memory, once it has slid into place
 }
 
 let nextIncident;

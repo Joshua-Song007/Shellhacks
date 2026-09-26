@@ -13,7 +13,7 @@
     <div class="gl-box gl-full"><canvas id="global-gl"></canvas></div>
     <header class="genome-head">
       <h1>Global genome</h1>
-      <p>Every cure proven by the T-Cell network. Your devices inherit each one the moment it's committed.</p>
+      <p>Every cure proven by the T-Cell network. Your devices inherit each one the moment it's committed. Click a block to see what it does.</p>
     </header>
     <dl class="genome-stats">
       <div><dt>Cures committed</dt><dd id="gs-genes">—</dd></div>
@@ -22,6 +22,35 @@
     </dl>
     <p class="genome-toast" id="toast" aria-live="polite"></p>
     <div class="probe" id="probe" aria-hidden="true"><strong></strong><span></span><span></span></div>
+    <div class="edge-cue top" aria-hidden="true"><svg viewBox="0 0 20 20"><path d="M5 12l5-5 5 5" /></svg></div>
+    <div class="edge-cue bottom" aria-hidden="true"><svg viewBox="0 0 20 20"><path d="M5 8l5 5 5-5" /></svg></div>
+    <aside class="detail" id="detail" aria-labelledby="d-name" hidden>
+      <header class="d-in">
+        <span class="d-chip" id="d-chip" aria-hidden="true"></span>
+        <div><h2 id="d-name"></h2><p id="d-when"></p></div>
+        <button class="d-close" id="d-close" aria-label="Close details">×</button>
+      </header>
+      <section class="d-in">
+        <h3>What it stops</h3>
+        <ul class="d-stops" id="d-stops"></ul>
+      </section>
+      <section class="d-in">
+        <h3>The cure</h3>
+        <ul class="d-cure" id="d-cure"></ul>
+        <p class="d-note" id="d-fit"></p>
+      </section>
+      <section class="d-in">
+        <h3>Proof</h3>
+        <div class="d-proof"><span id="d-proof"></span><p id="d-proof-t"></p></div>
+      </section>
+      <dl class="d-facts d-in">
+        <div><dt>Devices using it</dt><dd id="d-devices"></dd></div>
+        <div><dt>Cure size</dt><dd id="d-bytes"></dd></div>
+        <div><dt>Threat ID</dt><dd><code id="d-threat"></code></dd></div>
+        <div><dt>Gene hash</dt><dd><code id="d-gene"></code></dd></div>
+      </dl>
+      <p class="d-status d-in"><span></span>Active on every device. Any 3 of 5 nodes can turn it off if it breaks an app.</p>
+    </aside>
     <script type="module" src="/src/genome.js"></script>
   </body>
 </html>
