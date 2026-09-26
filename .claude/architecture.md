@@ -17,6 +17,7 @@ crates/
   mesh/           identity.rs, transport.rs, message.rs, verify.rs, revocation.rs
   trace-capture/  main.rs
 frontend/         electron/{main,preload,backend}.cjs, src/{data,main,mesh,helix,genome}.js
+advisor-service/  schema.sql (Postgres DDL; server not yet built, Phase 10)
 spikes/           spike1_eslogger.sh, spike1_trigger.c, spike2_libp2p_pair.rs, spike3_art_capture.md
                   out/ (gitignored raw captures)
 ```
