@@ -49,6 +49,9 @@ pub enum Event {
 pub struct ExecData {
     pub target: String,
     pub args: Vec<String>,
+    /// `pidver` of the process after the exec: eslogger bumps `pidversion` on
+    /// exec, so lineage must re-key `(pid, proc.pidver)` -> `(pid, new_pidver)`.
+    pub new_pidver: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -1,2 +1,4 @@
 /target
 .DS_Store
+# raw eslogger captures can contain other processes' env vars
+/spikes/out/

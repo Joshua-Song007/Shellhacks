@@ -64,7 +64,7 @@ T-cell is a decentralized, behavior-based endpoint defense system. Detection and
 
 - **FR-D-9 [MUST]** At cumulative score ≥ 100 the Scout SHALL suspend the lineage (`SIGSTOP`) and emit a wake signal `{Threat_ID, pid, schema}`. `Threat_ID` SHALL be SHA-256 over the ordered action bytes and SHALL be deterministic across nodes.
 - **FR-D-10 [MUST]** The Scout SHALL NOT suspend its own PID or PIDs below a system-process floor.
-- **FR-D-11 [SHOULD]** An optional outbound-beacon lane (T1046/T1071) SHALL be provided by a **separate** periodic collector using `lsof -i` / `nettop`, feeding TES. This lane SHALL NOT use `eslogger` (ES exposes no network events — CON-5). Periodic polling is acceptable here because a beacon is interval-based, not a millisecond window. *(Settled: `lsof` is the network collector.)*
+- **FR-D-11 [SHOULD]** An optional outbound-beacon lane (T1046/T1071) SHALL be provided by a **separate** periodic collector using `lsof -i` / `nettop`. Findings SHALL be written to the observation/dashboard output, separate from the TES-fed scoring pipeline: TES v1 (DATA-1) models a lossless, nanosecond-precision event stream, and a `lsof`-sampled interval signal is neither — forcing it into TES would give false seq/ts_ns precision to data that has none. This lane SHALL NOT use `eslogger` (ES exposes no network events — CON-5). Periodic polling is acceptable here because a beacon is interval-based, not a millisecond window. *(Settled: `lsof` is the network collector; findings bypass TES and scoring.)*
 
 ---
 

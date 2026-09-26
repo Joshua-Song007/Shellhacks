@@ -145,7 +145,7 @@ mod tests {
     #[test]
     fn accepts_every_event_kind() {
         let kinds = [
-            r#"{"kind":"exec","data":{"target":"/tmp/x","args":["/tmp/x","-v"]}}"#,
+            r#"{"kind":"exec","data":{"target":"/tmp/x","args":["/tmp/x","-v"],"new_pidver":8}}"#,
             r#"{"kind":"fork","data":{"child_pid":43,"child_pidver":1}}"#,
             EXIT,
             r#"{"kind":"open","data":{"path":"/a","write":true}}"#,

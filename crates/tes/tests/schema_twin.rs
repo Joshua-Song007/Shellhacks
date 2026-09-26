@@ -15,7 +15,8 @@ const EXIT: &str = r#"{"kind":"exit","data":{"status":0}}"#;
 
 fn fixtures() -> Vec<(&'static str, String, bool)> {
     vec![
-        ("exec", line("", r#"{"kind":"exec","data":{"target":"/tmp/a","args":["/tmp/a"]}}"#), true),
+        ("exec", line("", r#"{"kind":"exec","data":{"target":"/tmp/a","args":["/tmp/a"],"new_pidver":4}}"#), true),
+        ("exec without new_pidver", line("", r#"{"kind":"exec","data":{"target":"/tmp/a","args":["/tmp/a"]}}"#), false),
         ("fork", line("", r#"{"kind":"fork","data":{"child_pid":502,"child_pidver":1}}"#), true),
         ("exit", line("", EXIT), true),
         ("open", line("", r#"{"kind":"open","data":{"path":"/a","write":false}}"#), true),

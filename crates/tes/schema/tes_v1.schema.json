@@ -32,10 +32,11 @@
             "data": {
               "type": "object",
               "additionalProperties": false,
-              "required": ["target", "args"],
+              "required": ["target", "args", "new_pidver"],
               "properties": {
                 "target": { "$ref": "#/$defs/abspath" },
-                "args": { "type": "array", "items": { "type": "string" } }
+                "args": { "type": "array", "items": { "type": "string" } },
+                "new_pidver": { "$ref": "#/$defs/u64" }
               }
             }
           }

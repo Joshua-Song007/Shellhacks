@@ -12,6 +12,19 @@
 | tes | serde | 1.0.229 | normal | `derive` feature |
 | tes | serde_json | 1.0.151 | normal | |
 | tes | jsonschema | 0.58.0 | dev | `default-features = false` — defaults pull reqwest/tokio/aws-lc for remote `$ref` resolution, not needed |
+| scout | tes | path | normal | |
+| scout | serde | 1.0.229 | normal | `derive` feature |
+| scout | serde_json | 1.0.151 | normal | |
+| scout | sha2 | 0.11.0 | normal | Threat_ID |
+| scout | libc | 0.2.189 | normal | `kill(SIGSTOP)`; libproc, kqueue, `proc_pid_rusage` (degraded path) |
+
+## System tools used at runtime
+- `eslogger` (macOS 13+, root + Full Disk Access) — Scout primary source; verified on macOS 26.4.1 (SPIKE-1)
+- `cc` (Xcode CLT) — builds spikes/spike1_trigger.c
+- `lsof` — source_beacon.rs (FR-D-11 `lsof -i`, degraded lane) and bin/ac2_bench.rs (polling baseline, measurement-only, FR-D-1); never on Scout's own eslogger/libproc detection path
+
+## System frameworks linked
+- CoreServices (FSEvents), CoreFoundation — scout degraded path; hand-written FFI in source_libproc.rs, no binding crate
 
 ## Pending version bumps
 - none
