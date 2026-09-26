@@ -44,7 +44,9 @@ function onHover(h) {
 
 const helix = createHelix($('#gl'), { reduced, onHover });
 helix.setAnchor($('#band'));
-const layout = mobile ? { x: 1.7, tilt: 0.3, scale: 0.8 } : { x: 2.7, tilt: 0.42, scale: 1 };
+const layout = mobile
+  ? { x: 1.7, tilt: 0.3, scale: 0.8, meshX: 0, meshY: 1.8, meshScale: 1.4 }
+  : { x: 2.7, tilt: 0.42, scale: 1, meshX: 3.4, meshY: -0.6, meshScale: 2.5 };
 Object.assign(helix.state, layout);
 
 // ---------- Headline split ----------
@@ -129,6 +131,14 @@ function setupScroll() {
     ScrollTrigger.create({ trigger: el, start: 'top 72%', end: 'bottom 40%', toggleClass: 'is-on' }),
   );
 
+  // Chain -> enterprise: blocks leave the chain and regroup into a company-wide mesh.
+  // Only `mesh` is tweened here; helix.js blends the pose from it, so this never fights the timeline above.
+  gsap.to(helix.state, {
+    mesh: 1,
+    ease: 'none',
+    scrollTrigger: { trigger: '#enterprise', start: 'top 85%', end: 'top 15%', scrub: 0.6 },
+  });
+
   // Active tab
   ScrollTrigger.create({
     trigger: '#chain',
@@ -136,7 +146,54 @@ function setupScroll() {
     onEnter: () => setTab('chain'),
     onLeaveBack: () => setTab('top'),
   });
+  ScrollTrigger.create({
+    trigger: '#enterprise',
+    start: 'top 55%',
+    onEnter: () => setTab('enterprise'),
+    onLeaveBack: () => setTab('chain'),
+  });
 }
+
+// ---------- Personal / Enterprise ----------
+// Personal swaps the choice for the download in place; Enterprise scrolls down to its own section.
+let swapping = null;
+function swap(from, to, open) {
+  if (swapping?.isActive()) return;
+  const d = reduced ? 0 : 1;
+  $('#pick-personal').setAttribute('aria-expanded', open);
+  swapping = gsap
+    .timeline()
+    .to(from.children, { opacity: 0, y: -10, duration: 0.22 * d, ease: 'power2.in', stagger: 0.04 * d })
+    .add(() => {
+      from.hidden = true;
+      gsap.set(from.children, { clearProps: 'opacity,transform' });
+      to.hidden = false;
+    })
+    .fromTo(to.children, { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.6 * d, ease: 'expo.out', stagger: 0.07 * d, immediateRender: false })
+    .add(() => to.querySelector('a, button').focus({ preventScroll: true }), '<');
+}
+$('#pick-personal').addEventListener('click', () => swap($('#choose'), $('#get'), true));
+$('#get-back').addEventListener('click', () => swap($('#get'), $('#choose'), false));
+
+// ---------- Demo request (no backend: confirm in place) ----------
+$('#demo-form').addEventListener('submit', (e) => {
+  e.preventDefault(); // only fires once the browser's own email check passes
+  const form = e.currentTarget;
+  const done = $('#demo-done');
+  const d = reduced ? 0 : 1;
+  $('#demo-to').textContent = form.email.value.trim();
+  gsap
+    .timeline()
+    .to(form, { opacity: 0, y: -8, duration: 0.25 * d, ease: 'power2.in' })
+    .add(() => {
+      form.hidden = true;
+      done.hidden = false;
+      helix.wave(); // the mesh behind answers: one node lights and the rest follow
+    })
+    .fromTo(done, { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.6 * d, ease: 'expo.out', immediateRender: false })
+    .fromTo('#demo-done circle', { strokeDashoffset: 63 }, { strokeDashoffset: 0, duration: 0.6 * d, ease: 'power2.out', immediateRender: false }, '<')
+    .fromTo('#demo-done path', { strokeDashoffset: 16 }, { strokeDashoffset: 0, duration: 0.35 * d, ease: 'power2.out', immediateRender: false }, '-=0.25');
+});
 
 // ---------- Tabs ----------
 const pill = $('.tab-pill');
@@ -157,6 +214,7 @@ $$('[data-scroll]').forEach((a) =>
       scrollTo: { y: id === '#top' ? 0 : id, offsetY: 72, autoKill: true },
       duration: reduced ? 0 : 1.6,
       ease: 'power3.inOut',
+      onComplete: () => a.hasAttribute('data-demo') && $('#demo-email').focus({ preventScroll: true }),
     });
   }),
 );

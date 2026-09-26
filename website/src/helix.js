@@ -42,7 +42,7 @@ export function createHelix(canvas, { reduced = false, onHover = () => {} } = {}
   camera.position.set(0, 0, 11);
 
   // Everything scroll-driven lives in `state`; GSAP tweens these numbers.
-  const state = { build: 0, chain: 0, x: 0, y: 0, tilt: 0, scale: 1, follow: 0 };
+  const state = { build: 0, chain: 0, x: 0, y: 0, tilt: 0, scale: 1, follow: 0, mesh: 0, meshX: 0, meshY: 0, meshScale: 1 };
   let anchor = null;
 
   const root = new THREE.Group();
@@ -117,6 +117,51 @@ export function createHelix(canvas, { reduced = false, onHover = () => {} } = {}
   );
   links.frustumCulled = false;
   root.add(links);
+
+  // Enterprise mesh: blocks regroup into sites (a relay plus its devices) wired into one network.
+  const SITES = mobile ? 5 : 6;
+  const site = Array.from({ length: N }, (_, i) => i % SITES); // block i < SITES is its site's relay
+  const meshBase = Array.from({ length: N }, () => new THREE.Vector3());
+  // Laid flat like a network map: relays on a ring, each site's devices evenly spaced round their relay.
+  const PER = Math.ceil((N - SITES) / SITES);
+  const RING = 3.4;
+  const LOCAL = 1.05;
+  for (let c = 0; c < SITES; c++) {
+    const th = (c / SITES) * Math.PI * 2;
+    meshBase[c].set(Math.cos(th) * RING, 0, Math.sin(th) * RING);
+  }
+  for (let i = SITES; i < N; i++) {
+    const k = Math.floor((i - SITES) / SITES); // i-th device of its site
+    const th = (k / PER) * Math.PI * 2 + site[i] * 0.4;
+    meshBase[i].set(Math.cos(th) * LOCAL, 0, Math.sin(th) * LOCAL).add(meshBase[site[i]]);
+  }
+  // Relays wired round the ring and across the middle; each device to its relay and its neighbours on the site ring.
+  const edges = [];
+  const seen = new Set();
+  const link = (a, b) => {
+    const k = Math.min(a, b) * N + Math.max(a, b);
+    if (!seen.has(k)) seen.add(k), edges.push(a, b);
+  };
+  for (let c = 0; c < SITES; c++) link(c, (c + 1) % SITES), link(c, (c + SITES / 2) % SITES | 0);
+  for (let i = SITES; i < N; i++) {
+    link(i, site[i]);
+    const next = i + SITES < N ? i + SITES : SITES + site[i]; // next device on the same ring, wrapping to the first
+    if (next !== i) link(i, next);
+  }
+  const E = edges.length / 2;
+  const mPos = new Float32Array(E * 6);
+  const mCol = new Float32Array(E * 6);
+  const meshGeo = new THREE.BufferGeometry();
+  meshGeo.setAttribute('position', new THREE.BufferAttribute(mPos, 3));
+  meshGeo.setAttribute('color', new THREE.BufferAttribute(mCol, 3));
+  const meshLinks = new THREE.LineSegments(
+    meshGeo,
+    new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }),
+  );
+  meshLinks.frustumCulled = false;
+  root.add(meshLinks);
+  const waves = []; // [time, block] flashes queued by wave()
+  const WAVE = 0.4; // gentler than a single pulse: the whole mesh lights at once, and bloom sums it
 
   // Drifting particles: free antigens / antibodies in the field
   const P = mobile ? 600 : 1400;
@@ -366,6 +411,10 @@ export function createHelix(canvas, { reduced = false, onHover = () => {} } = {}
   const up = new THREE.Vector3(0, 1, 0);
   const col = new THREE.Color();
   const euler = new THREE.Euler();
+  const bp = new THREE.Vector3();
+  const mp = new THREE.Vector3();
+  const meshRot = new THREE.Matrix4();
+  const lerp = THREE.MathUtils.lerp;
 
   const tmp2 = new THREE.Vector2();
   function resize() {
@@ -399,13 +448,22 @@ export function createHelix(canvas, { reduced = false, onHover = () => {} } = {}
 
   const clock = new THREE.Clock();
 
+  // A cure spreading: one device learns it, its relay passes it on, every other site inherits it.
+  function wave(from = SITES + ((Math.random() * (N - SITES)) | 0)) {
+    const t0 = clock.elapsedTime;
+    const home = site[from];
+    waves.push([t0, from], [t0 + 0.25, home]);
+    for (let c = 0; c < SITES; c++) if (c !== home) waves.push([t0 + 0.55, c]);
+    for (let i = SITES; i < N; i++) if (i !== from) waves.push([t0 + (site[i] === home ? 0.4 : 0.8) + Math.random() * 0.25, i]);
+  }
+
   function frame() {
     const dt = Math.min(clock.getDelta(), 0.05);
     const t = clock.elapsedTime;
     const speed = reduced ? 0.2 : 1;
 
     phase += dt * 0.35 * speed * (1 - state.chain * 0.85);
-    flow += dt * 0.55 * speed * state.chain;
+    flow += dt * 0.55 * speed * state.chain * (1 - clamp01(state.mesh));
 
     // Group placement. In chain mode the axis locks to a DOM anchor.
     let y = state.y;
@@ -416,9 +474,13 @@ export function createHelix(canvas, { reduced = false, onHover = () => {} } = {}
       const ay = THREE.MathUtils.clamp((0.5 - (r.top + r.height / 2) / innerHeight) * vh, -vh * 0.6, vh * 0.6);
       y = THREE.MathUtils.lerp(state.y, ay, state.follow);
     }
-    root.position.set(state.x, y, 0);
-    root.rotation.z = state.tilt;
-    root.scale.setScalar(state.scale);
+    // Mesh stage blends the whole group toward its own resting place, so the scroll timeline never has to own two poses.
+    const M = ease(clamp01(state.mesh));
+    root.position.set(lerp(state.x, state.meshX, M), lerp(y, state.meshY, M), -6 * M); // sits well back behind the copy; distance also flattens the perspective
+    root.rotation.z = state.tilt * (1 - M);
+    root.scale.setScalar(lerp(state.scale, state.meshScale, M));
+    meshRot.makeRotationFromEuler(euler.set(0.62, t * 0.05 * speed, 0)); // spin in-plane, then tip the map toward the camera
+    for (let k = waves.length - 1; k >= 0; k--) if (waves[k][0] <= t) (flash[waves[k][1]] = Math.max(flash[waves[k][1]], WAVE)), waves.splice(k, 1);
 
     // Camera parallax
     camera.position.x += (pointer.nx * 0.6 - camera.position.x) * 0.04;
@@ -431,7 +493,7 @@ export function createHelix(canvas, { reduced = false, onHover = () => {} } = {}
     let best = -1;
     let hoverD = Infinity;
     let bestD = mobile ? 70 : 95;
-    if (pointer.active && state.build > 0.95) {
+    if (pointer.active && state.build > 0.95 && state.mesh < 0.5) { // the mesh is a backdrop: no probe over the copy
       for (let i = 0; i < N; i++) {
         // Hit-test the un-popped axis point: a popped block slides toward the camera, which would move its target under the cursor.
         const [sx, sy] = screenOf(tmp.set(0, centers[i].y, 0).applyMatrix4(root.matrixWorld));
@@ -461,12 +523,16 @@ export function createHelix(canvas, { reduced = false, onHover = () => {} } = {}
       const ay = (slot - half) * SP;
       const a = slot * TWIST + phase; // twist by slot so the conveyor's wrap seam stays at the off-screen ends
       const pop = e * 0.35 * (1 - state.chain);
+      // Sites gather one after another as the mesh forms.
+      const em = ease(clamp01(state.mesh * 1.5 - (site[i] / SITES) * 0.5));
+      mp.copy(meshBase[i]).applyMatrix4(meshRot);
+      bp.set(0, ay, pop).lerp(mp, em);
 
-      pA.set(Math.cos(a) * R, ay, Math.sin(a) * R).lerp(tmp.set(-CUBE * 0.5 - 0.02, ay, pop), e);
-      pB.set(-Math.cos(a) * R, ay, -Math.sin(a) * R).lerp(tmp.set(CUBE * 0.5 + 0.02, ay, pop), e);
-      centers[i].set(0, ay, pop);
+      pA.set(Math.cos(a) * R, ay, Math.sin(a) * R).lerp(tmp.set(-CUBE * 0.5 - 0.02, ay, pop), e).lerp(bp, em);
+      pB.set(-Math.cos(a) * R, ay, -Math.sin(a) * R).lerp(tmp.set(CUBE * 0.5 + 0.02, ay, pop), e).lerp(bp, em);
+      centers[i].copy(bp);
 
-      const nScale = build * (1 - 0.55 * e);
+      const nScale = build * (1 - 0.55 * e) * (1 - em);
       m4.compose(pA, q.identity(), s.setScalar(nScale));
       nodes.setMatrixAt(i * 2, m4);
       m4.compose(pB, q, s);
@@ -480,18 +546,18 @@ export function createHelix(canvas, { reduced = false, onHover = () => {} } = {}
       rungs.setMatrixAt(i, m4);
 
       // Block untwists into alignment as it forms
-      const bs = CUBE * e * build * (1 + (i === hover ? 0.25 : 0) + flash[i] * 0.5);
-      q.setFromEuler(euler.set(0, a * (1 - e), 0));
-      m4.compose(tmp.set(0, ay, pop), q, s.setScalar(bs));
+      const bs = CUBE * e * build * (1 + (i === hover ? 0.25 : 0) + flash[i] * 0.5) * lerp(1, i < SITES ? 1.7 : 0.75, em);
+      q.setFromEuler(euler.set(em * (t * 0.3 + i), a * (1 - e) + em * (t * 0.4 + i * 1.7), 0));
+      m4.compose(bp, q, s.setScalar(bs));
       blocks.setMatrixAt(i, m4);
-      col.copy(colBlock[i]).multiplyScalar(1 + (i === hover ? 1.2 : 0) + flash[i] * 2.5);
+      col.copy(colBlock[i]).multiplyScalar((1 + (i === hover ? 1.2 : 0) + flash[i] * 2.5) * lerp(1, 0.45, em)); // mesh stays a backdrop
       blocks.setColorAt(i, col);
 
       // Link to next pair (skipped across the wrap seam)
       if (i < N - 1) {
         const nextSlot = (((i + 1 + flow) % N) + N) % N;
         const ok = nextSlot > slot;
-        const k = ok ? Math.min(e, ease(mix[i + 1])) * build : 0;
+        const k = ok ? Math.min(e, ease(mix[i + 1])) * build * clamp01(1 - state.mesh * 3) : 0;
         const o = i * 6;
         linkPos[o] = 0; linkPos[o + 1] = ay + bs * 0.5; linkPos[o + 2] = pop;
         linkPos[o + 3] = 0; linkPos[o + 4] = ay + SP - bs * 0.5; linkPos[o + 5] = pop;
@@ -507,6 +573,22 @@ export function createHelix(canvas, { reduced = false, onHover = () => {} } = {}
     blocks.instanceColor.needsUpdate = true;
     linkGeo.attributes.position.needsUpdate = true;
     linkGeo.attributes.color.needsUpdate = true;
+
+    // Mesh wires appear once the nodes have mostly arrived; a wave lights them as it passes.
+    const ML = clamp01(state.mesh * 2 - 1);
+    meshLinks.visible = ML > 0;
+    if (ML > 0) {
+      for (let k = 0; k < E; k++) {
+        const a = edges[k * 2];
+        const b = edges[k * 2 + 1];
+        centers[a].toArray(mPos, k * 6);
+        centers[b].toArray(mPos, k * 6 + 3);
+        col.copy(colBlock[a]).lerp(colBlock[b], 0.5).multiplyScalar(ML * (0.22 + (flash[a] + flash[b]) * 0.6));
+        col.toArray(mCol, k * 6);
+        col.toArray(mCol, k * 6 + 3);
+      }
+      meshGeo.attributes.position.needsUpdate = meshGeo.attributes.color.needsUpdate = true;
+    }
 
     particles.rotation.y = t * 0.012;
     particles.position.y = Math.sin(t * 0.2) * 0.2;
@@ -529,8 +611,10 @@ export function createHelix(canvas, { reduced = false, onHover = () => {} } = {}
   return {
     state,
     setAnchor: (el) => (anchor = el),
-    // Brighten a random on-screen block (used when a new block lands).
+    wave,
+    // Brighten a random on-screen block (used when a new block lands); in the mesh, send a cure wave instead.
     pulse() {
+      if (state.mesh > 0.5) return wave();
       const visible = [];
       for (let i = 0; i < N; i++) {
         const [sx, sy] = screenOf(tmp.copy(centers[i]).applyMatrix4(root.matrixWorld));

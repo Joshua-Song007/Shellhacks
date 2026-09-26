@@ -40,8 +40,9 @@
         <span class="tab-pill" aria-hidden="true"></span>
         <a href="#top" data-scroll data-tab="top" class="is-active">Overview</a>
         <a href="#chain" data-scroll data-tab="chain">Live chain</a>
+        <a href="#enterprise" data-scroll data-tab="enterprise">Enterprise</a>
       </nav>
-      <a class="btn btn-small" data-download href="#">Download</a>
+      <a class="btn btn-small" href="#demo" data-scroll data-demo>Request a demo</a>
     </header>
 
     <main>
@@ -54,11 +55,24 @@
           T-Cell is an immune system for your devices. When any machine on the network learns to stop an attack, the cure is written to a shared chain, and every other machine inherits it.
         </p>
         <div class="hero-actions reveal">
-          <a class="btn" data-download href="#">
-            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v10m0 0-4-4m4 4 4-4M4 16h12" /></svg>
-            Download
-          </a>
-          <a class="btn-ghost" href="#chain" data-scroll>See the live chain</a>
+          <div class="choose" id="choose">
+            <button class="btn" type="button" id="pick-personal" aria-controls="get" aria-expanded="false">
+              <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 9.5a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM4.5 17c.6-3 2.8-4.8 5.5-4.8s4.9 1.8 5.5 4.8" /></svg>
+              Personal
+            </button>
+            <a class="btn btn-dark" href="#enterprise" data-scroll>
+              <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3.5 17V5.5l6-2.5v14M9.5 8h7v9M2 17h16M6 7.5v.01M6 10.5v.01M6 13.5v.01M13 11v.01M13 14v.01" /></svg>
+              Enterprise
+            </a>
+          </div>
+          <div class="get" id="get" hidden>
+            <a class="btn" data-download href="#">
+              <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v10m0 0-4-4m4 4 4-4M4 16h12" /></svg>
+              Download
+            </a>
+            <p class="get-note">Free for personal use.</p>
+            <button class="btn-ghost" type="button" id="get-back">Back</button>
+          </div>
         </div>
         <p class="hint reveal" aria-hidden="true"><span class="hint-dot"></span><span class="hint-text">Hover the strand to read its blocks</span></p>
       </section>
@@ -112,12 +126,33 @@
         </div>
       </section>
 
-      <footer class="cta" id="download">
-        <h2 class="cta-title">Give your computer an immune system.</h2>
-        <a class="btn btn-large" data-download href="#">
-          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v10m0 0-4-4m4 4 4-4M4 16h12" /></svg>
-          Download 
-        </a>
+      <section class="enterprise" id="enterprise" aria-labelledby="ent-title">
+        <p class="source ent-badge"><span class="source-dot"></span>Enterprise, early access</p>
+        <h2 id="ent-title" class="section-title">Every endpoint, one immune system.</h2>
+        <p class="ent-sub">Across a company, every laptop and server becomes a node in one private mesh. When a machine in one office stops an attack, every other site inherits the cure before the attack gets there.</p>
+        <ul class="ent-points">
+          <li><h3>Your own signers</h3><p>Cures spread only after nodes you control have tested and signed them.</p></li>
+          <li><h3>One switch for every device</h3><p>If a cure misbehaves, turn it off across the whole fleet at once.</p></li>
+          <li><h3>A record of every decision</h3><p>Each report, cure and switch-off is a signed entry your security team can audit.</p></li>
+        </ul>
+        <a class="btn" href="#demo" data-scroll data-demo>Request a demo</a>
+      </section>
+
+      <footer class="cta" id="demo">
+        <h2 class="cta-title">See it on your own fleet.</h2>
+        <p class="cta-sub">Leave a work email and we'll set up a walkthrough on your devices.</p>
+        <form class="demo" id="demo-form">
+          <label for="demo-email">Work email</label>
+          <div class="demo-bar">
+            <input id="demo-email" name="email" type="email" placeholder="you@company.com" autocomplete="email" required />
+            <button class="btn" type="submit">Request a demo</button>
+          </div>
+        </form>
+        <p class="demo-done" id="demo-done" role="status" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" /><path d="M7.5 12.5l3 3 6-6.5" /></svg>
+          <span>Demo requested. We'll write to <b id="demo-to"></b> to find a time.</span>
+        </p>
+        <p class="cta-alt">Just protecting your own computer? <a data-download href="#">Download</a></p>
         <p class="colophon">T-Cell, built at ShellHacks 2026.</p>
       </footer>
     </main>
