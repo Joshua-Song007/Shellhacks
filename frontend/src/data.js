@@ -19,11 +19,11 @@ const rand = (a, b) => a + Math.random() * (b - a);
 const HOUR = 3_600_000;
 
 export const state = {
-  self: 'this-mac',
+  self: 'this-device',
   devices: [
-    { id: 'this-mac', name: 'This Mac', kind: 'laptop' },
+    { id: 'this-device', name: 'This device', kind: 'laptop' },
     { id: 'kitchen', name: 'Kitchen iMac', kind: 'desktop' },
-    { id: 'studio', name: 'Studio Mac mini', kind: 'mini' },
+    { id: 'studio', name: 'Studio device mini', kind: 'mini' },
     { id: 'work', name: 'Work MacBook', kind: 'laptop' },
     { id: 'den', name: 'Den iMac', kind: 'desktop' },
   ].map((d) => ({ ...d, status: 'clean', heartbeat: Date.now(), pubkey: hex(32) })),

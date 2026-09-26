@@ -112,7 +112,7 @@ const helix = createHelix($('#local-gl'), {
     probeI = h.index;
     const g = state.genes[h.index];
     $('strong', probe).textContent = g.name;
-    $('span', probe).textContent = `${g.from === state.self ? 'Found by this Mac' : g.from === 'network' ? 'Learned from the network' : `Shared by ${nameOf(g.from)}`}, ${ago(g.time)}`;
+    $('span', probe).textContent = `${g.from === state.self ? 'Found by this device' : g.from === 'network' ? 'Learned from the network' : `Shared by ${nameOf(g.from)}`}, ${ago(g.time)}`;
   },
 });
 $('#open-genome').addEventListener('click', () => (window.tcell ? window.tcell.openGenome() : open('genome.html', 'genome', 'width=1100,height=760')));
@@ -122,7 +122,7 @@ function renderContrib() {
   const list = state.contributions;
   const cures = list.filter((b) => b.kind === 'commit_gene').length;
   $('#contrib-sub').textContent = list.length
-    ? `This Mac has written ${list.length} ${list.length === 1 ? 'block' : 'blocks'} to the shared chain${cures ? `, including ${cures} ${cures === 1 ? 'cure' : 'cures'} other people now use` : ''}.`
+    ? `This device has written ${list.length} ${list.length === 1 ? 'block' : 'blocks'} to the shared chain${cures ? `, including ${cures} ${cures === 1 ? 'cure' : 'cures'} other people now use` : ''}.`
     : '';
   $('#contrib-list').innerHTML = list.length
     ? list
@@ -135,7 +135,7 @@ function renderContrib() {
           </li>`,
         )
         .join('')
-    : `<li class="empty">Nothing yet. When this Mac is the first to catch a threat, the cure it writes to the chain shows up here.</li>`;
+    : `<li class="empty">Nothing yet. When this device is the first to catch a threat, the cure it writes to the chain shows up here.</li>`;
 }
 
 // ---------- Terminal ----------
