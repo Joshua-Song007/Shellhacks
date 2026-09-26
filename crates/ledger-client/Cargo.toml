@@ -1,0 +1,21 @@
+[package]
+name = "ledger-client"
+edition.workspace = true
+version.workspace = true
+publish.workspace = true
+
+[dependencies]
+t_cell = { path = "../ledger-program/programs/t_cell", features = ["cpi"] }
+anchor-lang = "1.1.2"
+solana-client = "3"
+solana-keypair = "3.1.2"
+solana-signer = "3.0.1"
+solana-message = "3.1.0"
+solana-transaction = "3.1.0"
+solana-pubkey = "3.0.0"
+solana-commitment-config = "3"
+solana-signature = "3"
+
+[dev-dependencies]
+bincode = "1"
+solana-hash = "3"
