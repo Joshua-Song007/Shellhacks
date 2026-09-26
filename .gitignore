@@ -2,3 +2,5 @@
 .DS_Store
 # raw eslogger captures can contain other processes' env vars
 /spikes/out/
+# devnet-only PoI committee keypairs (FR-L-6); ephemeral demo keys, not committed
+/crates/ledger-program/keys/

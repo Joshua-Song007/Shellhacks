@@ -1,0 +1,22 @@
+skip_local_validator = true
+
+[toolchain]
+
+[features]
+resolution = true
+skip-lint = false
+
+[programs.localnet]
+t_cell = "27v76nMPKQg5akQHBsPHnhPt8K7kSf3s8GZjRzUnvBuq"
+
+[programs.devnet]
+t_cell = "27v76nMPKQg5akQHBsPHnhPt8K7kSf3s8GZjRzUnvBuq"
+
+[provider]
+cluster = "devnet"
+wallet = "~/.config/solana/id.json"
+
+[scripts]
+test = "cargo test"
+
+[hooks]

@@ -33,7 +33,9 @@ spikes/           spike1_eslogger.sh, spike1_trigger.c, spike2_libp2p_pair.rs, s
 - sandbox -> wasmi only; no tes/scout dependency
 - allele_search -> scout::scoring::Action (containment_value reuses Action::weight() rather than a second weight table); no tes dependency; defines the ContainmentTarget trait, implemented by replay_target
 - replay_target -> scout::scoring::{Action, exec_actions, BURST_WINDOW_NS, BURST_OPS} (pure/stateless helpers only, not Scorer/lineage), tes::schema::{TesEvent, Event}; implements allele_search::ContainmentTarget
-- lib.rs -> trigger, sandbox, allele_search, replay_target (module declarations only)
+- gene_compile -> allele_search::{Allele, ALL} (bitmask encoding), sandbox::{Sandbox, SandboxError} (apply = instantiate); own sha2/wat deps; no tes/scout dependency
+- lib.rs -> trigger, sandbox, allele_search, replay_target, gene_compile (module declarations only)
+- main.rs (binary entrypoint, not part of lib.rs) -> trigger, replay_target, allele_search, gene_compile
 
 ## Dependency graph (A -> B means A depends on B)
 - scout -> tes

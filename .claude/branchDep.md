@@ -22,7 +22,8 @@
 | soldier | serde | 1.0.229 | normal | `derive` feature |
 | soldier | serde_json | 1.0.151 | normal | |
 | soldier | wasmi | 0.32.3 | normal | resolved from `"0.32"`; 2.0.0 is available but not requested — sandbox.rs pins the 0.32 API (Engine/Linker/Module/Store) |
-| soldier | wat | 1.259.0 | dev | compiles WAT text fixtures to wasm bytes for sandbox.rs tests, avoids hand-encoding wasm binaries |
+| soldier | wat | 1.259.0 | normal | gene_compile.rs compiles the winning allele sequence's WAT text to wasm at runtime; also still used by sandbox.rs's test fixtures |
+| soldier | sha2 | 0.11.0 | normal | gene_compile.rs's gene_hash (own hasher, not scout::scoring's — see architecture.md) |
 
 ## System tools used at runtime
 - `eslogger` (macOS 13+, root + Full Disk Access) — Scout primary source; verified on macOS 26.4.1 (SPIKE-1)
