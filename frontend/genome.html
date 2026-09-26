@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' ws: wss:" />
+    <title>Global genome</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@300..700&family=Hanken+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body class="genome-page">
+    <div class="gl-box gl-full"><canvas id="global-gl"></canvas></div>
+    <header class="genome-head">
+      <h1>Global genome</h1>
+      <p>Every cure proven by the T-Cell network. Your devices inherit each one the moment it's committed.</p>
+    </header>
+    <dl class="genome-stats">
+      <div><dt>Cures committed</dt><dd id="gs-genes">—</dd></div>
+      <div><dt>Devices immunized</dt><dd id="gs-devices">—</dd></div>
+      <div><dt>Latest block</dt><dd id="gs-slot">—</dd></div>
+    </dl>
+    <p class="genome-toast" id="toast" aria-live="polite"></p>
+    <div class="probe" id="probe" aria-hidden="true"><strong></strong><span></span><span></span></div>
+    <script type="module" src="/src/genome.js"></script>
+  </body>
+</html>
