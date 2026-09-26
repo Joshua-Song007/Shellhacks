@@ -24,6 +24,13 @@
 | soldier | wasmi | 0.32.3 | normal | resolved from `"0.32"`; 2.0.0 is available but not requested — sandbox.rs pins the 0.32 API (Engine/Linker/Module/Store) |
 | soldier | wat | 1.259.0 | normal | gene_compile.rs compiles the winning allele sequence's WAT text to wasm at runtime; also still used by sandbox.rs's test fixtures |
 | soldier | sha2 | 0.11.0 | normal | gene_compile.rs's gene_hash (own hasher, not scout::scoring's — see architecture.md) |
+| t_cell | anchor-lang | "1.1.2" -> resolved 1.2.0, `init-if-needed` feature | normal | crates/ledger-program is its own nested Anchor/Cargo workspace, NOT a root-workspace member; its own rust-toolchain.toml pins channel 1.89.0 (older than the root workspace's 1.95.0) — anchor init's own scaffold choice, not adjusted |
+| t_cell | litesvm | 0.10.0 | dev | in-process Rust-native test validator for tests/test_instructions.rs; no anchor-cli/local-validator/Node needed at test time, only `anchor build` once first to produce target/deploy/t_cell.so |
+| t_cell | solana-keypair/-message/-transaction/-signer | 3.1.2/3.0.1/3.0.2/3.0.0 (scaffold-pinned) | dev | test-only tx construction; solana-keypair's `read_keypair_file` loads the 5 devnet PoI keypairs under keys/ |
+
+## Ledger program (nested Anchor workspace, `crates/ledger-program/`)
+- toolchain confirmed present: anchor-cli 1.1.2, solana-cli 3.1.10 (see Toolchain above)
+- 5 devnet-only PoI committee keypairs generated 2026-09-26 via `solana-keygen new`, stored gitignored under `crates/ledger-program/keys/poi-{1..5}.json`; their pubkeys are hardcoded into `poi.rs`'s `POI_COMMITTEE` const (see plan.md Phase 4 for why hardcoded vs. a runtime config account)
 
 ## System tools used at runtime
 - `eslogger` (macOS 13+, root + Full Disk Access) — Scout primary source; verified on macOS 26.4.1 (SPIKE-1)

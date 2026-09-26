@@ -10,7 +10,9 @@ crates/
   scout/          reader.rs, source_eslogger.rs, source_libproc.rs, source_beacon.rs, lineage.rs, scoring.rs, pipeline.rs, main.rs
                   tests/pipeline.rs, tests/fixtures/eslogger_trigger.ndjson
   soldier/        trigger.rs, sandbox.rs, allele_search.rs, replay_target.rs, reenactor.rs, gene_compile.rs, main.rs
-  ledger-program/ programs/t_cell/src/{state.rs, poi.rs, lib.rs}
+  ledger-program/ Anchor.toml, keys/ (gitignored, 5 devnet PoI keypairs), programs/t_cell/
+                  src/{constants.rs, error.rs, state.rs, poi.rs, instructions.rs, instructions/{submit_threat.rs, commit_gene.rs, suppress_gene.rs}, lib.rs}
+                  tests/test_instructions.rs (litesvm, no local-validator/Node dependency)
   ledger-client/  client.rs
   mesh/           identity.rs, transport.rs, message.rs, verify.rs, revocation.rs
   trace-capture/  main.rs
@@ -36,6 +38,16 @@ spikes/           spike1_eslogger.sh, spike1_trigger.c, spike2_libp2p_pair.rs, s
 - gene_compile -> allele_search::{Allele, ALL} (bitmask encoding), sandbox::{Sandbox, SandboxError} (apply = instantiate); own sha2/wat deps; no tes/scout dependency
 - lib.rs -> trigger, sandbox, allele_search, replay_target, gene_compile (module declarations only)
 - main.rs (binary entrypoint, not part of lib.rs) -> trigger, replay_target, allele_search, gene_compile
+
+## Ledger program internals (A -> B means A calls/uses B)
+- constants.rs -> anchor-lang only (SEED bytes, MAX_REPORTERS/MAX_GENE_BYTES caps); no other module
+- state.rs -> constants (SEED/MAX_* for PDA seeds and fixed SPACE consts); defines ThreatRegistry, GenomeRegistry
+- poi.rs -> error::TCellError only; hardcoded 5-pubkey POI_COMMITTEE + pure require_poi(&[Pubkey]) (no Signer/Anchor-runtime dependency, unit-testable with plain cargo test)
+- instructions/submit_threat.rs -> constants::MAX_REPORTERS, error::TCellError, state::ThreatRegistry; no poi (ungated, corroboration only)
+- instructions/commit_gene.rs, instructions/suppress_gene.rs -> poi::require_poi, state::GenomeRegistry, error::TCellError (commit_gene also constants::MAX_GENE_BYTES); both take 5 required (non-Option) Signer accounts, dedup/counted by poi::require_poi
+- instructions.rs -> re-exports the 3 instruction files' Accounts structs (module declarations only)
+- lib.rs -> declares constants/error/instructions/poi/state; #[program] block is thin wiring to each instructions/*.rs handle_* fn
+- tests/test_instructions.rs -> litesvm (loads the built .so directly, no anchor-cli/local-validator/Node needed at test time) + the 5 devnet keypairs under keys/ (gitignored) for PoI-signing scenarios
 
 ## Dependency graph (A -> B means A depends on B)
 - scout -> tes
