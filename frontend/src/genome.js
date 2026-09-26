@@ -60,6 +60,7 @@ const helix = createHelix($('#global-gl'), {
   },
   onSelect: (h) => select(h),
   onHover(h) {
+    if (open >= 0) h = null; // the panel already says what this is; a second card over it names a neighbour
     probe.classList.toggle('on', !!h);
     if (!h) return (probeI = -1);
     probe.style.transform = `translate(${h.x}px, ${h.y}px)`;
@@ -133,15 +134,14 @@ function select({ index, x, y, color }) {
   const r = panel.getBoundingClientRect();
   gsap.set(panel, { opacity: 0 });
   gsap.set(body, { opacity: 0, y: 12 });
-  // 1) arc out to the side (x and y on different eases), 2) unfold into the panel's rectangle, 3) contents stagger in.
-  tl.to(gh, { left: r.left + 34, duration: 0.7, ease: 'power3.inOut' }, 0)
-    .to(gh, { top: r.top + 44, duration: 0.7, ease: 'power2.out' }, 0)
-    .to(gh, { rotation: 0, scale: 1.4, duration: 0.7, ease: 'power2.inOut' }, 0)
-    .to(gh, { left: r.left, top: r.top, xPercent: 0, yPercent: 0, scale: 1, width: r.width, height: r.height, borderRadius: 18, duration: 0.55, ease: 'expo.inOut' }, 0.62)
-    .to(gh, { backgroundColor: 'rgba(6, 10, 22, 0.9)', duration: 0.45, ease: 'power2.inOut' }, 0.72)
-    .set(panel, { opacity: 1 })
-    .to(gh, { opacity: 0, duration: 0.2 })
-    .to(body, { opacity: 1, y: 0, duration: 0.5, ease: 'power3.out', stagger: 0.05 }, '<');
+  // 1) stretch straight out to the side as a bar at the block's own height, 2) grow vertically into the panel, 3) contents stagger in.
+  const yb = Math.min(Math.max(y, r.top + 11), r.bottom - 11);
+  tl.to(gh, { left: r.left, top: yb - 11, xPercent: 0, yPercent: 0, width: r.width, height: 22, rotation: 0, borderRadius: 11, duration: 0.3, ease: 'power3.out' }, 0)
+    .to(gh, { top: r.top, height: r.height, borderRadius: 18, duration: 0.34, ease: 'expo.out' }, 0.24)
+    .to(gh, { backgroundColor: 'rgba(6, 10, 22, 0.9)', duration: 0.3, ease: 'power2.inOut' }, 0.2)
+    .set(panel, { opacity: 1 }, 0.5)
+    .to(gh, { opacity: 0, duration: 0.12 }, 0.5)
+    .to(body, { opacity: 1, y: 0, duration: 0.3, ease: 'power3.out', stagger: 0.03 }, 0.44);
 }
 
 function close() {
@@ -157,11 +157,12 @@ function close() {
   gsap.set(gh, { left: r.left, top: r.top, xPercent: 0, yPercent: 0, rotation: 0, width: r.width, height: r.height, borderRadius: 18, backgroundColor: 'rgba(6, 10, 22, 0.9)' });
   gsap
     .timeline({ onComplete: () => (gh.remove(), open < 0 && helix.pin(-1)) })
-    .to(panel.querySelectorAll('.d-in'), { opacity: 0, y: -8, duration: 0.2, stagger: 0.02 })
+    .to(panel.querySelectorAll('.d-in'), { opacity: 0, duration: 0.12 })
     .call(() => (panel.hidden = open < 0))
-    .to(gh, { width: 22, height: 22, borderRadius: 3, left: r.left + 34, top: r.top + 44, xPercent: -50, yPercent: -50, backgroundColor: k, duration: 0.45, ease: 'expo.inOut' })
-    .to(gh, { left: to.x, top: to.y, rotation: 45, duration: 0.55, ease: 'power3.inOut' })
-    .to(gh, { scale: 0.4, opacity: 0, duration: 0.2 }, '-=0.12');
+    // Same path in reverse: collapse to a bar at the block's height, then retract sideways into it.
+    .to(gh, { top: to.y - 11, height: 22, borderRadius: 11, backgroundColor: k, duration: 0.26, ease: 'expo.in' })
+    .to(gh, { left: to.x - 11, width: 22, rotation: 45, borderRadius: 3, duration: 0.26, ease: 'power3.in' })
+    .to(gh, { scale: 0.4, opacity: 0, duration: 0.1 });
 }
 
 $('#d-close').addEventListener('click', close);
