@@ -1,0 +1,12 @@
+[workspace]
+
+[package]
+name = "spike2_libp2p_pair"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+libp2p = { version = "0.54", features = ["tcp", "noise", "yamux", "tokio", "macros", "ping"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
+futures = "0.3"

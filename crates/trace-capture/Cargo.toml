@@ -1,0 +1,12 @@
+[package]
+name = "trace-capture"
+edition.workspace = true
+version.workspace = true
+publish.workspace = true
+
+[dependencies]
+tes = { path = "../tes" }
+# narrow reuse: only source_eslogger::map_line (pure ES-schema -> TES
+# mapping), not the live detection pipeline -- see currentDev.md/plan.md
+# for why this was chosen over reimplementing that parsing from scratch.
+scout = { path = "../scout" }
