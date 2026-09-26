@@ -68,7 +68,8 @@ main { position: relative; z-index: 1; }
   padding: 18px var(--gutter);
 }
 .brand { display: flex; align-items: center; gap: 10px; font: 600 19px/1 var(--display); }
-.brand svg { width: 28px; height: 28px; fill: none; stroke: var(--a); stroke-width: 2.2; stroke-linecap: round; }
+.brand svg { width: 28px; height: 28px; fill: none; stroke: var(--a); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.brand svg .strand { stroke-width: 1.8; }
 .tabs {
   position: relative; display: flex; padding: 4px;
   border: 1px solid var(--faint); border-radius: 999px;
