@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>T-Cell</title>
+    <meta name="description" content="T-Cell is an immune system for your devices. When one machine learns to stop an attack, every connected machine inherits the cure." />
+    <meta name="theme-color" content="#02040b" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2302040b'/%3E%3Cpath d='M10 5c0 8 12 14 12 22M22 5c0 8-12 14-12 22' stroke='%234ff5d2' stroke-width='2.4' fill='none' stroke-linecap='round'/%3E%3C/svg%3E" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Anybody:wdth,wght@50..150,200..900&family=Hanken+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body class="is-loading">
+    <canvas id="gl" aria-hidden="true"></canvas>
+
+    <div id="loader" role="status" aria-label="Loading T-Cell">
+      <div class="loader-half loader-top"></div>
+      <div class="loader-half loader-bottom"></div>
+      <div class="loader-inner">
+        <div class="seq" aria-hidden="true">
+          <div class="seq-row seq-a"></div>
+          <div class="seq-row seq-b"></div>
+        </div>
+        <div class="loader-count" aria-hidden="true"><span id="pct">0</span></div>
+        <p class="loader-note">Sequencing immune memory</p>
+      </div>
+    </div>
+
+    <header class="nav">
+      <a class="brand" href="#top" data-scroll aria-label="T-Cell home">
+        <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M10 5c0 8 12 14 12 22M22 5c0 8-12 14-12 22M12.5 10h7M12.5 22h7" /></svg>
+        <span>T-Cell</span>
+      </a>
+      <nav class="tabs" aria-label="Sections">
+        <span class="tab-pill" aria-hidden="true"></span>
+        <a href="#top" data-scroll data-tab="top" class="is-active">Overview</a>
+        <a href="#chain" data-scroll data-tab="chain">Live chain</a>
+      </nav>
+      <a class="btn btn-small" data-download href="#">Download</a>
+    </header>
+
+    <main>
+      <section class="hero" id="top">
+        <h1 class="hero-title" aria-label="Catch it once. Immune everywhere.">
+          <span class="line" data-split>Catch it once.</span>
+          <span class="line" data-split>Immune everywhere.</span>
+        </h1>
+        <p class="hero-sub reveal">
+          T-Cell is an immune system for your devices. When any machine on the network learns to stop an attack, the cure is written to a shared chain, and every other machine inherits it.
+        </p>
+        <div class="hero-actions reveal">
+          <a class="btn" data-download href="#">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v10m0 0-4-4m4 4 4-4M4 16h12" /></svg>
+            Download for macOS
+          </a>
+          <a class="btn-ghost" href="#chain" data-scroll>See the live chain</a>
+        </div>
+        <p class="hint reveal" aria-hidden="true"><span class="hint-dot"></span><span class="hint-text">Hover the strand to read its blocks</span></p>
+      </section>
+
+      <section class="steps" id="how" aria-labelledby="how-title">
+        <h2 id="how-title" class="section-title">How immunity spreads</h2>
+        <ol class="step-list">
+          <li class="step">
+            <span class="step-n">01</span>
+            <h3>Recognize</h3>
+            <p>A scout on your Mac watches what processes do, not what they are called. When a chain of actions starts to look like ransomware, it's frozen mid-step.</p>
+          </li>
+          <li class="step">
+            <span class="step-n">02</span>
+            <h3>Contain</h3>
+            <p>A soldier wakes inside a sealed sandbox and tries containment moves until one stops the threat without breaking the apps you rely on.</p>
+          </li>
+          <li class="step">
+            <span class="step-n">03</span>
+            <h3>Prove</h3>
+            <p>Five nodes test the cure. Three have to sign before it's written to the chain, so a single bad actor can't push a fake one.</p>
+          </li>
+          <li class="step">
+            <span class="step-n">04</span>
+            <h3>Inherit</h3>
+            <p>Every connected device pulls the cure and is protected before the threat ever reaches it. If a cure misbehaves, it can be switched off everywhere at once.</p>
+          </li>
+        </ol>
+      </section>
+
+      <section class="chain" id="chain" aria-labelledby="chain-title">
+        <div class="chain-head">
+          <div>
+            <h2 id="chain-title" class="section-title">Live chain</h2>
+            <p class="chain-sub">Each block is a threat a device reported or a cure the network proved. New ones arrive as devices find them.</p>
+          </div>
+          <p class="source"><span class="source-dot"></span><span id="source">Connecting</span></p>
+        </div>
+
+        <div class="band" id="band" aria-hidden="true"></div>
+
+        <dl class="stats">
+          <div><dt>Latest slot</dt><dd id="s-height">—</dd></div>
+          <div><dt>Threats tracked</dt><dd id="s-threats">—</dd></div>
+          <div><dt>Cures committed</dt><dd id="s-cures">—</dd></div>
+          <div><dt>Devices immunized</dt><dd id="s-devices">—</dd></div>
+        </dl>
+
+        <div class="track-wrap">
+          <ol class="track" id="track" aria-label="Most recent blocks, newest first"></ol>
+        </div>
+      </section>
+
+      <footer class="cta" id="download">
+        <h2 class="cta-title">Give your Mac an immune system.</h2>
+        <a class="btn btn-large" data-download href="#">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v10m0 0-4-4m4 4 4-4M4 16h12" /></svg>
+          Download for macOS
+        </a>
+        <p class="cta-note">Requires macOS 13 or later, on Apple silicon or Intel.</p>
+        <p class="colophon">T-Cell, built at ShellHacks 2026.</p>
+      </footer>
+    </main>
+
+    <div id="probe" aria-hidden="true">
+      <span class="probe-line"></span>
+      <div class="probe-card">
+        <strong id="probe-title"></strong>
+        <span id="probe-hash"></span>
+        <span id="probe-pair"></span>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
