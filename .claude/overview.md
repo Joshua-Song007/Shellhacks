@@ -50,7 +50,10 @@ T-cell is a decentralized, behavior-based endpoint defense system. Detection and
 - **FR-D-4 [MUST]** Every source SHALL be normalized to TES v1 (DATA-1) before rule evaluation. Rules SHALL consume TES only, never raw source output.
 - **FR-D-5 [MUST]** The TES boundary SHALL reject any event with unknown fields, wrong schema version, non-absolute path, or `pid == 0`. Rejected lines SHALL be counted, never partially accepted.
 - **FR-D-6 [MUST]** The inbound source adapter SHALL tolerate unknown fields in raw source events (strictness is enforced only at the TES boundary).
-- **FR-D-7 [MUST]** Scoring SHALL accumulate by process lineage: a child's actions roll up to the lineage root (via `fork`/`exec`); a lineage trajectory SHALL survive any single PID exit; process identity SHALL be `(pid, pidver)`.
+- **FR-D-7 [MUST]** Scoring SHALL accumulate by process lineage: a child's actions roll up to the lineage root (via `fork`/`exec`); a lineage trajectory SHALL survive any single PID exit; process identity SHALL be `(pid, pidver)`, where `pidver` discriminates a recycled PID.
+  - On the eslogger path, `pidver` SHALL be taken directly from the event's audit token (`pidversion`) — provided natively, no derivation needed.
+  - On the degraded path (FR-D-3), where the audit token is unavailable, `pidver` SHALL be derived from the process start time via `proc_pidinfo(PROC_PIDTBSDINFO)` → `proc_bsdinfo.pbi_start_tvsec` (not `PROC_PIDTASKINFO`, which carries no start time).
+- **FR-D-7a [MUST]** The telemetry reader SHALL decouple pipe reading from parsing: a dedicated thread/task SHALL read raw lines off the source's stdout and hand them to a **bounded** channel *before* any JSON deserialization or TES normalization, so parsing can never backpressure the OS pipe. The channel SHALL have an explicit drop policy; drops SHALL be counted and surfaced (alongside source-side drops inferred from `seq` gaps, DATA-1), never silent. Rationale: under load a lagging reader fills the kernel pipe buffer, producing dropped events or phantom latency; `eslogger` is a NOTIFY client, so it is not killed for slowness — it simply drops.
 - **FR-D-8 [MUST]** Stage-1 actions, weights, and detectors SHALL be:
 
   | Action | Weight | ATT&CK | Detector (TES) |
@@ -75,6 +78,7 @@ T-cell is a decentralized, behavior-based endpoint defense system. Detection and
 - **FR-R-6 [MAY]** Real containment alleles (`SIGSTOP`, kill child tree, block sockets, quarantine dropped files, revert touched files) MAY replace synthetic allele physics. If implemented, they SHALL act on a live benign **reenactor** process that re-performs the TES trace — not on trace data — with reset = relaunch the reenactor.
 - **FR-R-7 [MUST]** The winning allele sequence SHALL compile to a portable `.wasm`, be hashed to `gene_hash`, be applied, and the Soldier SHALL self-terminate after application.
 - **FR-R-8 [MUST]** Trace capture (FR-R-5) SHALL run offline in `sandbox_init`/`sandbox-exec` (macOS atomics) and/or a free-tier Linux VM (other atomics). It SHALL NOT be on the demo or evolution-loop path.
+- **FR-R-9 [MUST]** The compiled gene SHALL be size-disciplined to satisfy CON-9: debug symbols stripped, minimal `wasm`, targeting a payload that fits a single Solana transaction (see CON-9). If a gene cannot be kept within one transaction, `commit_gene` SHALL upload it via chunked appends across multiple transactions rather than a single write. The `Genome Registry` PDA SHALL be initialized with a fixed, generous maximum (e.g. 4,096 bytes) to avoid `AccountStorageFull`.
 
 ---
 
@@ -121,6 +125,7 @@ T-cell is a decentralized, behavior-based endpoint defense system. Detection and
 - **NFR-4 [SHOULD]** Private keys SHALL never be transmitted and SHOULD be stored in the macOS Keychain / Secure Enclave.
 - **NFR-5 [MUST]** Safety boundary (see CON-7, CON-8, FR-R-2, FR-L-8) SHALL hold: no live malware, no raw telemetry/payload on-chain, cure sandbox provably import-free.
 - **NFR-6 [MUST]** `Threat_ID` and `gene_hash` SHALL be deterministic across nodes given identical input.
+- **NFR-7 [MUST]** Telemetry ingestion SHALL sustain bursty high-volume event streams without silently dropping or stalling: reading is decoupled from parsing per FR-D-7a, and event loss (reader-side channel drops and source-side `seq` gaps) SHALL be counted and observable. This is a correctness property, not just performance — silent drops = missed detections.
 
 ---
 
@@ -150,13 +155,15 @@ Genome Registry PDA: `{Threat_ID, gene_hash, gene_seq (bytes), Epigenetic_Status
 ## 10. Constraints & non-goals
 
 - **CON-1** Gene bytes stored on-chain (`gene_seq`); no IPFS / off-chain blob store.
-- **CON-2** RPC `confirmed`/`finalized` reads only; no custom Merkle light-client, no local validator.
+- **CON-2** RPC `confirmed`/`finalized` reads only; no custom Merkle light-client, no local validator. Trust-minimized reads (Merkle inclusion proofs against a block header) are **not** a standard Solana client primitive — they depend on in-progress protocol work (SIMD-0052) and the still-maturing Tinydancer light client, so they are out of scope. Cheap mitigation if RPC trust is a concern: cross-read the same account from ≥2 independent RPC providers. (A Merkle tree used as a *set-commitment* structure — one on-chain root over a set of hashes with off-chain membership proofs — is unrelated and permitted; relevant only to a future surveillance layer.)
+- **CON-2a** Devnet SOL / rent cost is not a constraint (hackathon credits cover it). This does **not** relax CON-9, which is a size limit, not a cost.
 - **CON-3** No Firecracker/MicroVM (requires Linux+KVM; will not run on macOS) and no AWS Lambda for capture (ephemeral, locked-down, Firecracker-based, no low-level telemetry).
 - **CON-4** No kernel extension and no dependency on the ES client entitlement; entitlement-free telemetry only.
 - **CON-5** Endpoint Security exposes no general network events (Apple directs network monitoring to NetworkExtension). Network detection therefore uses the separate `lsof`/`nettop` collector (FR-D-11) only.
 - **CON-6** Endpoint Security exposes file operations, not file contents; no content-entropy detection. `RapidFileModBurst` keys on operation rate/pattern.
 - **CON-7** No live malware at any point. Threats are benign Atomic Red Team atomics; the evolution loop uses replayed/authored traces.
 - **CON-8** Clean-room: no reuse of prior-project code.
+- **CON-9** A Solana transaction is capped at **1232 bytes total**. A gene therefore cannot be written to `gene_seq` in a single transaction unless its payload fits within that budget (≈ sub-900 bytes after instruction overhead). Genes exceeding this MUST be uploaded via chunked appends (FR-R-9). This is a hard size limit that credits/rent do not address (CON-2a), and it is what makes the on-chain-gene decision (CON-1) valid only for tiny genes: if genes grow beyond one transaction and chunked writes aren't implemented, the on-chain-vs-off-chain tradeoff must be revisited. (Account allocation caps — 10 MiB max, ~10 KB `realloc` growth per instruction — are secondary to the transaction-size wall.)
 
 ---
 
