@@ -151,6 +151,7 @@ fn run<S: Suspender>(args: &Args, suspender: S) -> io::Result<()> {
             Ok(raw) => {
                 let detection =
                     if tes_lines { pipeline.feed_tes_line(&raw.line) } else { pipeline.feed_eslogger_line(&raw) };
+                report_progress(&mut out, &mut pipeline)?;
                 if let Some(d) = detection {
                     report_detection(&mut out, args, &d)?;
                 }
@@ -199,14 +200,18 @@ fn run_libproc<S: Suspender>(args: &Args, roots: &[PathBuf], suspender: S) -> io
     let mut last_stats = Instant::now();
     loop {
         for ev in procs.next_events(Some(args.stats_every))? {
-            if let Some(d) = pipeline.feed_tes_event(ev) {
+            let detection = pipeline.feed_tes_event(ev);
+            report_progress(&mut out, &mut pipeline)?;
+            if let Some(d) = detection {
                 report_detection(&mut out, args, &d)?;
             }
         }
         for batch in batches.try_iter() {
             let attributed = procs.attribute(&batch);
             for ev in attributed.events {
-                if let Some(d) = pipeline.feed_inferred_event(ev, attributed.candidates) {
+                let detection = pipeline.feed_inferred_event(ev, attributed.candidates);
+                report_progress(&mut out, &mut pipeline)?;
+                if let Some(d) = detection {
                     report_detection(&mut out, args, &d)?;
                 }
             }
@@ -241,6 +246,19 @@ fn report_finding(out: &mut impl Write, finding: &Finding) -> io::Result<()> {
     record["type"] = json!("network_finding");
     writeln!(out, "{record}")?;
     out.flush()
+}
+
+/// FR-U-2: one `progress` record per Stage-1 action credited, written
+/// before the `detection` record the same event may also produce.
+fn report_progress<S: Suspender>(out: &mut impl Write, pipeline: &mut Pipeline<S>) -> io::Result<()> {
+    let progress = pipeline.drain_progress();
+    for g in &progress {
+        writeln!(out, "{}", json!({ "type": "progress", "progress": g }))?;
+    }
+    if !progress.is_empty() {
+        out.flush()?;
+    }
+    Ok(())
 }
 
 fn report_detection(out: &mut impl Write, args: &Args, d: &Detection) -> io::Result<()> {

@@ -61,3 +61,19 @@
 - [x] frontend/src/helix.js — three.js + bloom helix rendering gene hashes as blocks (visual only, not in overview.md; hover hit-tests the un-popped axis point with px hysteresis so every block is reachable (was skipping every other; same fix applied to website/src/helix.js); optional edgeScroll (top/bottom 16% hover band + wheel) and onSelect/pin for the genome view)
 - [x] frontend/src/genome.js (+ genome.html) — global genome window: helix of chain gene commits + global stats, driven by `block` events (simulated ledger, not ledger-client; top/bottom edge-hover scroll; clicked block flies out (DOM ghost, GSAP) and unfolds into a side detail panel: actions stopped, winning alleles (same exhaustive search as allele_search.rs), PoI signers, devices using it, size, Threat_ID, gene_hash — per-gene devices/bytes are random sim values)
 </content>
+
+## Phase 9 — Backend ↔ frontend integration (replaces data.js `simulate()` in Electron; consumes Phases 2–8)
+- [ ] crates/scout/src/pipeline.rs — `Progress` record per Stage-1 action credited to a lineage, `drain_progress` (FR-U-2 `watching`)
+- [ ] crates/scout/src/main.rs — emit `{"type":"progress"}` before any `detection`
+- [ ] crates/soldier/traces/demo_ransomware.ndjson — hand-authored TES trace crossing all 3 Stage-1 actions (FR-R-4)
+- [ ] crates/soldier/traces/benign_apps.ndjson — whitelisted-app TES trace (Stage-3 benign input)
+- [ ] crates/soldier/src/main.rs — `cure.schema`; module doc names backend.cjs as relaunch supervisor
+- [ ] crates/soldier/src/regression.rs — Stage-3 check on a finished gene vs benign trace (FR-M-5)
+- [ ] crates/mesh/src/identity.rs — `Roster::admit` (issuer-side pairing record)
+- [ ] crates/mesh/src/bin/meshd.rs — mesh daemon: pairing, signed hints, status, revoke (FR-M-1..7, AC-6)
+- [ ] crates/ledger-client/src/client.rs + examples/feed.rs — `recent_signatures`/`all_genomes`, NDJSON ledger feed
+- [ ] scripts/test_threat.sh + scripts/test_threat.c — benign synthetic trigger
+- [ ] frontend/electron/backend.cjs — supervisor + bridge + wake relay
+- [ ] frontend/electron/main.cjs + preload.cjs — IPC bridge
+- [ ] frontend/src/data.js — live translator
+- [ ] frontend/src/main.js + index.html — join-by-URI, async pairing, source badge

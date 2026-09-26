@@ -6,10 +6,10 @@ use serde::Serialize;
 use tes::schema::{Event, TesEvent};
 use tes::{Stats, Validator};
 
-use crate::lineage::Lineages;
+use crate::lineage::{LineageId, Lineages};
 use crate::reader::{RawLine, now_ns};
 use crate::scoring::{
-    Evidence, InferredAction, Scorer, SuspendPolicy, SuspendReport, Suspender, Verdict, WakeSignal, hex,
+    Action, Evidence, InferredAction, Scorer, SuspendPolicy, SuspendReport, Suspender, Verdict, WakeSignal, hex,
     suspend_all,
 };
 use crate::source_eslogger;
@@ -28,6 +28,31 @@ pub struct Detection {
     pub suspended_ns: u64,
     /// NFR-1: suspension time minus the OS time of the tipping action.
     pub latency_ns: u64,
+}
+
+/// One Stage-1 action newly credited to a lineage, before (or at)
+/// conviction -- the dashboard's pre-conviction `watching` signal (FR-U-2).
+#[derive(Debug, Clone, Serialize)]
+pub struct Progress {
+    pub lineage: LineageId,
+    pub root_exe: String,
+    /// Lineage score after this action.
+    pub score: u32,
+    pub action: Action,
+    pub attack_id: &'static str,
+    pub event: TesEvent,
+}
+
+const ACTIONS: [Action; 3] = [Action::ExecFromTempOrCache, Action::RapidFileModBurst, Action::RecoverySnapshotTamper];
+
+/// Actions whose weights sum to `delta`. Every subset of the Stage-1 weights
+/// (20/40/50) has a distinct sum, so the score delta alone names what was
+/// credited without widening Scorer's API.
+fn credited(delta: u32) -> Vec<Action> {
+    (1u8..8)
+        .map(|m| ACTIONS.iter().enumerate().filter(|(i, _)| m & (1 << i) != 0).map(|(_, a)| *a).collect::<Vec<_>>())
+        .find(|set| set.iter().map(|a| a.weight()).sum::<u32>() == delta)
+        .unwrap_or_default()
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
@@ -53,6 +78,7 @@ pub struct Pipeline<S: Suspender> {
     unmodeled_kinds: u64,
     inferred_events: u64,
     detections: u64,
+    progress: Vec<Progress>,
 }
 
 impl<S: Suspender> Pipeline<S> {
@@ -67,6 +93,7 @@ impl<S: Suspender> Pipeline<S> {
             unmodeled_kinds: 0,
             inferred_events: 0,
             detections: 0,
+            progress: Vec::new(),
         }
     }
 
@@ -107,7 +134,25 @@ impl<S: Suspender> Pipeline<S> {
 
     fn process_with(&mut self, ev: TesEvent, evidence: Evidence) -> Option<Detection> {
         let lineage = self.lineages.observe(&ev);
-        let detection = self.scorer.observe_with(lineage, &ev, evidence).map(|v| self.convict(v, &ev));
+        let before = self.scorer.score(lineage);
+        let verdict = self.scorer.observe_with(lineage, &ev, evidence);
+        let after = self.scorer.score(lineage);
+        if after > before {
+            let root_exe = self.lineages.get(lineage).map(|l| l.root_exe.clone()).unwrap_or_default();
+            let mut score = before;
+            for action in credited(after - before) {
+                score += action.weight();
+                self.progress.push(Progress {
+                    lineage,
+                    root_exe: root_exe.clone(),
+                    score,
+                    action,
+                    attack_id: action.attack_id(),
+                    event: ev.clone(),
+                });
+            }
+        }
+        let detection = verdict.map(|v| self.convict(v, &ev));
         if matches!(ev.event, Event::Exit(_)) && self.lineages.retire_if_empty(lineage) {
             self.scorer.forget(lineage);
         }
@@ -136,6 +181,11 @@ impl<S: Suspender> Pipeline<S> {
             suspended_ns,
             latency_ns: suspended_ns.saturating_sub(verdict.trigger_ts_ns),
         }
+    }
+
+    /// Progress records accumulated since the last drain, oldest first.
+    pub fn drain_progress(&mut self) -> Vec<Progress> {
+        std::mem::take(&mut self.progress)
     }
 
     pub fn suspender(&self) -> &S {

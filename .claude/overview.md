@@ -112,7 +112,7 @@ T-cell is a decentralized, behavior-based endpoint defense system. Detection and
 
 ## 7. Functional requirements — Dashboard
 
-- **FR-U-1 [MUST]** A read-only dashboard (Tauri + React + Vite) SHALL show live telemetry and the ledger feed.
+- **FR-U-1 [MUST]** A read-only dashboard (Electron + vanilla JS + Vite) SHALL show live telemetry and the ledger feed.
 - **FR-U-2 [SHOULD]** A "My Devices" view SHALL show each paired lymph node with status (`clean` / `watching` / `isolated` / `cured`) and a heartbeat, and SHALL visibly reflect threat propagation across the mesh.
 
 ---

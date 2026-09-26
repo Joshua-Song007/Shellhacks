@@ -205,3 +205,36 @@ fn scout_binary_replays_eslogger_capture_and_tes_trace() {
     assert_eq!(detection["detection"]["wake"]["threat_id"], THREAT_ID_EXEC_TAMPER_BURST);
     assert_eq!(detection["detection"]["suspend"]["suspended"], serde_json::json!([701, 702, 703]));
 }
+
+#[test]
+fn each_credited_action_emits_one_progress_record_in_order() {
+    let mut p = pipeline();
+    let mut detections = 0;
+    for e in attack_trace().events {
+        detections += p.feed_tes_event(e).is_some() as usize;
+    }
+    let progress = p.drain_progress();
+    let got: Vec<(Action, u32)> = progress.iter().map(|g| (g.action, g.score)).collect();
+    assert_eq!(
+        got,
+        [
+            (Action::ExecFromTempOrCache, 20),
+            (Action::RecoverySnapshotTamper, 70),
+            (Action::RapidFileModBurst, 110)
+        ]
+    );
+    assert_eq!(detections, 1);
+    assert!(progress.iter().all(|g| g.root_exe == "/private/tmp/payload"));
+    assert_eq!(progress[1].attack_id, "T1490");
+    assert!(p.drain_progress().is_empty(), "drain empties the buffer");
+}
+
+#[test]
+fn one_exec_crediting_two_actions_emits_both() {
+    let mut t = Trace::new();
+    t.exec(900, "/bin/sh", "/tmp/tmutil", &["tmutil", "deletelocalsnapshots", "/"]);
+    let mut p = pipeline();
+    p.feed_tes_event(t.events.remove(0));
+    let got: Vec<(Action, u32)> = p.drain_progress().iter().map(|g| (g.action, g.score)).collect();
+    assert_eq!(got, [(Action::ExecFromTempOrCache, 20), (Action::RecoverySnapshotTamper, 70)]);
+}
