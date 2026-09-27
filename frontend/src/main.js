@@ -429,7 +429,7 @@ const followBtn = $('#follow');
 function setFollow(on) {
   follow = on;
   followBtn.classList.toggle('is-on', on);
-  followBtn.setAttribute('aria-pressed', on);
+  followBtn.textContent = `Tracking: ${on ? 'ON' : 'OFF'}`;
   if (on) scrollTerm();
 }
 followBtn.addEventListener('click', () => setFollow(!follow));
