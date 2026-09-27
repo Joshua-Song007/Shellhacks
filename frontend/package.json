@@ -81,6 +81,9 @@
       "category": "public.app-category.utilities",
       "identity": "-",
       "hardenedRuntime": false
-    }
+    },
+    "asarUnpack": [
+      "electron/askpass.applescript"
+    ]
   }
 }

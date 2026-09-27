@@ -311,7 +311,8 @@ function scoutArgs(cfg) {
   return [...base, '--wake-socket', cfg.wakeSocketPath];
 }
 
-const ASKPASS_HELPER = path.join(__dirname, 'askpass.applescript');
+// sudo execve's this, so it can't live inside app.asar (a virtual archive); packaged builds unpack it (package.json build.asarUnpack).
+const ASKPASS_HELPER = path.join(__dirname, 'askpass.applescript').replace(`app.asar${path.sep}`, `app.asar.unpacked${path.sep}`);
 
 function scoutSpawn(cfg) {
   if (cfg.scoutMode === 'eslogger') {
