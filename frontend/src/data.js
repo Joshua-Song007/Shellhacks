@@ -403,6 +403,18 @@ export function inject() {
   runIncident();
 }
 
+// Dismisses the finished incident from the panel so main.js's "Run test
+// threat"/"Clear test" toggle can offer a fresh run again. Only ever
+// resets the DISPLAY pointer, not any underlying result -- in live mode the
+// real detection/cure/ledger activity already happened for real regardless
+// (liveIncidents keeps the entry, a repeat test_threat.sh run starts a new
+// one anyway since its root_exe is a fresh mktemp path each time); in sim
+// mode the incident object is simply dropped.
+export function clearIncident() {
+  state.incident = null;
+  emit('threat', null);
+}
+
 // ---------- Live translator (Phase 9 item 11): scout/soldier/mesh/ledger NDJSON -> the SAME feed contract above ----------
 // window.tcell (preload.cjs) only exists under Electron; a plain browser
 // (`npm run web`) has no bridge, so state.source stays 'simulated' and
@@ -425,6 +437,24 @@ function pushHistory() {
 
 const schemaLabel = (schema) => schema.map((a) => ACT_LABEL[a] ?? a).join(', ');
 const deviceByPubkey = (pubkey) => state.devices.find((d) => d.pubkey === pubkey);
+
+// simulate()'s own cure completion (line ~204) shows 'cured' for exactly this
+// long before settling back to 'clean' -- the live path never had an
+// equivalent revert, so a real cure left the device stuck on "Fixed"
+// indefinitely. Guarded on the CURRENT status still being 'cured' at fire
+// time (not unconditional) so a newer detection/status change that landed
+// in between (e.g. another repeat run's own isolated -> cured cycle) is
+// never clobbered by a stale timer from an earlier one.
+const CURED_REVERT_MS = 6000;
+function scheduleCuredRevert(id) {
+  setTimeout(() => {
+    const d = device(id);
+    if (d && d.status === 'cured') {
+      setStatus(id, 'clean');
+      emit('incident', { device: id, phase: 'clear' });
+    }
+  }, CURED_REVERT_MS);
+}
 
 function liveIncidentFor(rootExe) {
   let inc = liveIncidents.get(rootExe);
@@ -544,6 +574,7 @@ function onSoldier(payload) {
     // 'genome' record ingest, both of which already populate it.
     state.stoppedThisWeek++;
     setStatus(state.self, 'cured');
+    scheduleCuredRevert(state.self);
     emit('incident', { device: state.self, phase: 'cured', threat: inc.threat });
   } else {
     // evolved: replay the EXISTING local search purely for the step-by-step
@@ -601,6 +632,7 @@ function onLedger(payload) {
     state.genes.push({ threat: known.threatId, gene: known.gene, name: known.name, from: state.self, time: Date.now(), bytes: undefined });
     emit('genes', state.genes);
     setStatus(state.self, 'cured');
+    scheduleCuredRevert(state.self);
     state.stoppedThisWeek++;
     if (inc) {
       inc.marks.commit = Date.now();

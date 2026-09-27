@@ -1,5 +1,5 @@
 import gsap from 'gsap';
-import { feed, state, inject, suppress, ALLELES, ACT_LABEL, ATTACK, THREATS, evaluate, startPairing, cancelPairing, revoke, joinByUri, getReview } from './data.js';
+import { feed, state, inject, clearIncident, suppress, ALLELES, ACT_LABEL, ATTACK, THREATS, evaluate, startPairing, cancelPairing, revoke, joinByUri, getReview } from './data.js';
 import QRCode from 'qrcode';
 import { createHelix } from './helix.js';
 import { createMesh, LABEL, GLYPH } from './mesh.js';
@@ -505,8 +505,16 @@ function renderIncident() {
   // data.js) and then never reaches `done` -- that permanently disabled this
   // button. Only a real conviction (marks.detect, set solely on an actual
   // Detection/SIGSTOP+wake, both here and in the simulated path) that hasn't
-  // yet finished (marks.immune) should block starting a new test.
-  $('#inject').disabled = !!inc && !!inc.marks.detect && !inc.marks.immune;
+  // yet finished should block starting a new test.
+  const finished = !!inc && (inc.done || !!inc.marks.immune);
+  const busy = !!inc && !!inc.marks.detect && !finished;
+  const injectBtn = $('#inject');
+  injectBtn.disabled = busy;
+  // A second test on top of an already-finished one was never a planned
+  // flow (nothing here resets a finished incident's own search/marks state
+  // for reuse) -- once done, the button becomes an explicit dismiss instead
+  // of silently starting another run over it.
+  injectBtn.textContent = finished ? 'Clear test' : 'Run test threat';
   if (!inc) {
     $('#inc-body').innerHTML = '<p class="empty">No threats yet. Scout is watching every process on this network. Run a test threat to see the full response.</p>';
     return;
@@ -556,7 +564,11 @@ function closeInspect() {
   $('#inspect').hidden = true;
 }
 $('#inspect-x').addEventListener('click', closeInspect);
-$('#inject').addEventListener('click', inject);
+$('#inject').addEventListener('click', () => {
+  const inc = state.incident;
+  if (inc && (inc.done || inc.marks.immune)) clearIncident();
+  else inject();
+});
 $('#inc-body').addEventListener('click', (e) => {
   if (e.target.closest('#suppress')) return suppress();
   const b = e.target.closest('[data-node]');
