@@ -355,8 +355,8 @@ body > .end-label.bottom { bottom: 14px; }
 .d-stops code { color: var(--muted); font-size: 12px; }
 .d-stops b { font: 500 12.5px var(--mono); color: var(--amber); min-width: 3ch; text-align: right; }
 .d-cure { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; }
-.d-cure li { padding: 5px 11px; border-radius: 999px; border: 1px solid var(--faint); font-size: 12.5px; color: #56657a; text-decoration: line-through; text-decoration-color: rgba(138, 155, 176, 0.35); }
-.d-cure li.on { color: var(--abyss); background: var(--a); border-color: var(--a); font-weight: 600; text-decoration: none; }
+.d-cure li { padding: 5px 11px; border-radius: 999px; border: 1px solid var(--faint); font-size: 12.5px; color: #56657a; }
+.d-cure li.on { color: var(--abyss); background: var(--a); border-color: var(--a); font-weight: 600; }
 .d-note { color: var(--muted); font-size: 13px; margin-top: 10px; }
 .d-proof { display: flex; align-items: center; gap: 14px; }
 .d-proof span { display: flex; gap: 5px; }

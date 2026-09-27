@@ -92,7 +92,7 @@ function fill(g, color) {
   $('#d-stops').innerHTML = g.actions.map((a) => `<li><span>${ACT_LABEL[a]}</span><code>${ATTACK[a]}</code><b>+${WEIGHT[a]}</b></li>`).join('');
   const e = evaluate(g.mask, g.actions);
   $('#d-cure').innerHTML = ALLELES.map((a, i) => `<li class="${g.mask & (1 << i) ? 'on' : ''}">${a.label}</li>`).join('');
-  $('#d-fit').textContent = `Stops ${e.containment} of ${g.actions.reduce((n, a) => n + WEIGHT[a], 0)} threat points at a cost of ${e.cost}.`;
+  $('#d-fit').textContent = `Stops ${e.containment} of ${g.actions.reduce((n, a) => n + WEIGHT[a], 0)} threat points.`;
   $('#d-proof').innerHTML = Array.from({ length: 5 }, (_, i) => `<i class="${i < g.signers ? 'on' : ''}"></i>`).join('');
   $('#d-proof-t').textContent = `${g.signers} of 5 nodes re-ran the cure and signed it`;
   $('#d-devices').textContent = fmt(g.devices);
