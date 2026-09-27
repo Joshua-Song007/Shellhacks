@@ -57,6 +57,7 @@ ipcMain.on('open-genome', (_e, gene) => {
 ipcMain.handle('tcell:mesh-command', (_e, cmd) => backend?.sendMeshCommand(cmd));
 ipcMain.handle('tcell:run-test-threat', () => backend?.runTestThreat());
 ipcMain.handle('tcell:advisor-review', (_e, force) => backend?.getReview(force) ?? null);
+ipcMain.handle('tcell:advisor-explain', (_e, block) => backend?.explainBlock(block) ?? null);
 ipcMain.handle('tcell:suppress-gene', (_e, threatIdHex) => backend?.suppressGene(threatIdHex));
 
 app.whenReady().then(() => {

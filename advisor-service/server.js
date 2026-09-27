@@ -32,6 +32,12 @@ function validIncident(i) {
   return !!i && HEX64.test(i.threat_id) && Array.isArray(i.actions) && Array.isArray(i.attack_ids);
 }
 
+// A genome block to explain: short strings and small counts only, so a signed caller can't stuff the prompt.
+const shortStrs = (a) => Array.isArray(a) && a.length <= 8 && a.every((s) => typeof s === 'string' && s.length <= 40);
+function validBlock(b) {
+  return !!b && typeof b.name === 'string' && b.name.length <= 80 && shortStrs(b.actions) && shortStrs(b.attack_ids) && shortStrs(b.cure) && Number.isInteger(b.signers) && Number.isInteger(b.devices);
+}
+
 // Gemma is asked for JSON but is free text; take the first {...} and keep only
 // the expected shape, else fall back to the whole reply as the headline.
 function parseReview(text) {
@@ -87,6 +93,12 @@ const REVIEW_PROMPT =
   'You are the T-cell endpoint-defense advisor giving a weekly review to a non-technical user. From the week summary (Stage-1 actions stopped, ATT&CK ids, daily trend, and last week\'s count for comparison), spot tendencies that put the user at risk and give practical habits to lower it. ' +
   'ExecFromTempOrCache = a program ran from a temp/cache/download folder (often an opened attachment or download); RecoverySnapshotTamper = something tried to delete backups; RapidFileModBurst = mass file changes, typical of ransomware. ' +
   'Reply with JSON only: {"headline": "<one short sentence, max 12 words>", "tips": ["<up to 3 short, specific habits, max 20 words each>"]}. Use only the data given; do not invent details.';
+
+const EXPLAIN_PROMPT =
+  'You are the T-cell endpoint-defense advisor. Explain one block of the shared cure ledger to someone completely non-technical, in 3 short plain sentences, under 70 words, no jargon, no ATT&CK ids, no hashes: what the threat did, what the cure does about it, and who checked it and how many devices have it (every connected device, including theirs, gets it automatically). ' +
+  'Threat actions: ExecFromTempOrCache = ran from a temp or downloads folder; RapidFileModBurst = rewrote many files in seconds, scrambling them; RecoverySnapshotTamper = deleted backups. ' +
+  'Cure steps: QuarantineDroppedFiles = locks away files it dropped; BlockSockets = cuts it off the internet; SigStop = freezes the program; RevertTouchedFiles = puts changed files back; KillChildTree = shuts down the program and everything it started. ' +
+  'signers = how many of 5 checking computers re-ran the cure and approved it. Reply with the explanation text only. Use only the data given; do not invent details.';
 
 const QUIET_REVIEW = { headline: 'A quiet week. Nothing tried to get in.', tips: ['Keep installing updates when your computer asks.'] };
 
@@ -184,6 +196,25 @@ function start() {
     send(res, 200, { summary, review });
   }
 
+  // One genome block in plain words. Derived, public-on-chain fields only; nothing is stored.
+  async function handleExplain(req, res) {
+    let auth;
+    try {
+      auth = authenticate(req.headers, await readBody(req), allowed);
+    } catch (e) {
+      return send(res, 401, { error: e.message });
+    }
+    const { block } = auth.body;
+    if (!validBlock(block)) return send(res, 400, { error: 'bad block' });
+    let summary = null;
+    try {
+      summary = (await chat(EXPLAIN_PROMPT, block, 250)).trim();
+    } catch (e) {
+      console.error('explain failed:', e.message);
+    }
+    send(res, 200, { summary });
+  }
+
   http
     .createServer((req, res) => {
       if (req.method === 'GET' && req.url === '/healthz') return send(res, 200, { ok: true });
@@ -199,6 +230,12 @@ function start() {
           send(res, 500, { error: 'internal' });
         });
       }
+      if (req.method === 'POST' && req.url === '/v1/explain') {
+        return handleExplain(req, res).catch((e) => {
+          console.error(e);
+          send(res, 500, { error: 'internal' });
+        });
+      }
       send(res, 404, { error: 'not found' });
     })
     .listen(Number(process.env.PORT) || 8080, () => console.log(`advisor listening on ${process.env.PORT || 8080}, ${allowed.size} allowed device(s)`));
@@ -210,4 +247,4 @@ function send(res, status, obj) {
 }
 
 if (require.main === module) start();
-module.exports = { authenticate, parseReview, validIncident };
+module.exports = { authenticate, parseReview, validIncident, validBlock };

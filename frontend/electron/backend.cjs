@@ -174,6 +174,23 @@ function makeAdvisorRelay(events, cfg) {
     }
   }
 
+  // Plain-language explanation of one genome block, cached per gene for the session (one model call per block).
+  // null = advisor off; { error } = unreachable or model down (the genome window falls back to its own text).
+  const explained = new Map();
+  async function explainBlock({ gene, ...block }) {
+    if (!cfg.advisorUrl) return null;
+    if (explained.has(gene)) return explained.get(gene);
+    try {
+      const { summary } = await signedPost('/v1/explain', { block });
+      if (!summary) return { error: 'model unavailable' };
+      explained.set(gene, { summary });
+      return { summary };
+    } catch (e) {
+      events.emit('error', { source: 'advisor', message: e.message });
+      return { error: e.message };
+    }
+  }
+
   function onScout(record) {
     if (!cfg.advisorUrl) return;
     if (record.type === 'progress') {
@@ -186,7 +203,7 @@ function makeAdvisorRelay(events, cfg) {
     }
   }
 
-  return { onScout, getReview };
+  return { onScout, getReview, explainBlock };
 }
 
 function tryParseJson(line) {
@@ -466,6 +483,7 @@ function startBackend(overrides = {}) {
       }
     },
     getReview: advisor.getReview,
+    explainBlock: advisor.explainBlock,
     runTestThreat() {
       // Deliberately NOT `spawn('sh', [cfg.testThreatScript], ...)`: a shell
       // observed with a positional (script-path) arg fails lineage.rs's

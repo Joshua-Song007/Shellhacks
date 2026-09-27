@@ -11,5 +11,6 @@ contextBridge.exposeInMainWorld('tcell', {
   sendMeshCommand: (cmd) => ipcRenderer.invoke('tcell:mesh-command', cmd),
   runTestThreat: () => ipcRenderer.invoke('tcell:run-test-threat'),
   getReview: (force) => ipcRenderer.invoke('tcell:advisor-review', force),
+  explainBlock: (block) => ipcRenderer.invoke('tcell:advisor-explain', block),
   suppressGene: (threatIdHex) => ipcRenderer.invoke('tcell:suppress-gene', threatIdHex),
 });

@@ -52,6 +52,13 @@
         <div><dt>Gene hash</dt><dd><code id="d-gene"></code></dd></div>
       </dl>
       <p class="d-status d-in"><span></span>Active on every device. Any 3 of 5 nodes can turn it off if it breaks an app.</p>
+      <section class="d-say d-in" aria-label="Plain-language summary">
+        <p class="d-bubble" id="d-say" aria-live="polite"></p>
+        <div class="d-speaker">
+          <button class="advisor-avatar" id="d-avatar" aria-label="Hear the summary again"><canvas id="d-avatar-gl"></canvas></button>
+          <span>Click me to hear it again</span>
+        </div>
+      </section>
     </aside>
     <script type="module" src="/src/genome.js"></script>
   </body>

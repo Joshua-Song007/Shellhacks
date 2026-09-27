@@ -1,6 +1,7 @@
 import gsap from 'gsap';
 import { feed, state, THREATS, ALLELES, WEIGHT, ATTACK, ACT_LABEL, evaluate } from './data.js';
 import { createHelix } from './helix.js';
+import { createAdvisorAvatar } from './advisor.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -100,7 +101,62 @@ function fill(g, color) {
   $('#d-threat').title = g.threat;
   $('#d-gene').textContent = `${g.gene.slice(0, 10)}…${g.gene.slice(-6)}`;
   $('#d-gene').title = g.gene;
+  tell(g);
 }
+
+// ---------- The advisor reads the open block out in plain words ----------
+// Gemma writes it (advisor-service /v1/explain, cached per gene by backend.cjs). This template is the fallback when the
+// advisor is off or unreachable, and the simulated/browser path, so the d20 always has something true to say.
+const DID = {
+  ExecFromTempOrCache: 'ran from a downloads folder',
+  RapidFileModBurst: 'scrambled your files so they couldn’t be opened',
+  RecoverySnapshotTamper: 'deleted your backups',
+};
+const FIX = {
+  QuarantineDroppedFiles: 'locks away anything it dropped',
+  BlockSockets: 'cuts it off the internet',
+  SigStop: 'freezes it',
+  RevertTouchedFiles: 'puts your files back',
+  KillChildTree: 'shuts it down with everything it started',
+};
+const list = (xs) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')}${xs.length > 2 ? ',' : ''} and ${xs.at(-1)}`);
+function summary(g) {
+  const fixes = ALLELES.filter((_, i) => g.mask & (1 << i)).map((a) => FIX[a.name]);
+  return [
+    `This block is a cure for ${g.name.toLowerCase()}: a program that ${list(g.actions.map((a) => DID[a]))}.`,
+    fixes.length ? `The cure ${list(fixes)}.` : 'No cure was needed to stop it; the network just remembers it.',
+    `${g.signers} of 5 checking computers tested it before it went live. ${fmt(g.devices)} ${g.devices === 1 ? 'device has' : 'devices have'} it now, and yours gets it automatically.`,
+  ].join(' ');
+}
+const avatar = createAdvisorAvatar($('#d-avatar-gl'), { reduced });
+const bubble = $('#d-say');
+let told = null;
+// Only derived, public-on-chain fields go to the model: names, ATT&CK ids, cure steps, counts.
+async function explain(g) {
+  if (g.explained) return g.explained;
+  const cure = ALLELES.filter((_, i) => g.mask & (1 << i)).map((a) => a.name);
+  const r = await window.tcell?.explainBlock?.({ gene: g.gene, name: g.name, actions: g.actions, attack_ids: g.actions.map((a) => ATTACK[a]), cure, signers: g.signers, devices: g.devices }).catch(() => null);
+  return r?.summary ? (g.explained = r.summary) : summary(g); // fallback isn't cached, so the next open retries the model
+}
+async function tell(g, delay = 0.45) {
+  told = g;
+  // Short windows push it below the fold; bring it up as it starts talking (its first line names the threat, so the header can scroll away).
+  const toSummary = () => panel.scrollTo({ top: panel.scrollHeight, behavior: reduced ? 'auto' : 'smooth' });
+  if (!g.explained) {
+    bubble.textContent = 'Reading this block…';
+    bubble.classList.add('thinking');
+  }
+  queueMicrotask(toSummary); // after select() unhides the panel
+  const text = await explain(g);
+  if (told !== g) return; // another block was opened while the model was answering
+  bubble.classList.remove('thinking');
+  // One span per word so the words can come in like speech; the text itself is whole from the start for screen readers.
+  bubble.innerHTML = text.split(' ').map((w) => `<span>${w.replace(/[&<>]/g, (c) => `&#${c.charCodeAt(0)};`)}</span>`).join(' ');
+  if (reduced) return toSummary();
+  gsap.fromTo(bubble.children, { opacity: 0 }, { opacity: 1, duration: 0.25, stagger: 0.022, delay, ease: 'none', overwrite: true });
+  gsap.delayedCall(delay, () => (toSummary(), avatar.nudge()));
+}
+$('#d-avatar').addEventListener('click', () => avatar.takeClick() && told && (avatar.hop(), tell(told, 0.2)));
 
 // A glowing square standing in for the 3D block while it travels.
 function ghost(x, y, color) {

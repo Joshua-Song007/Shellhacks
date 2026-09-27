@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const crypto = require('node:crypto');
-const { authenticate, parseReview, validIncident } = require('./server.js');
+const { authenticate, parseReview, validIncident, validBlock } = require('./server.js');
 
 const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
 const pubHex = publicKey.export({ format: 'der', type: 'spki' }).subarray(12).toString('hex');
@@ -49,6 +49,14 @@ test('rejects a malformed incident', () => {
   assert.strictEqual(validIncident(incident), true);
   assert.strictEqual(validIncident({ ...incident, threat_id: 'zz' }), false);
   assert.strictEqual(validIncident(undefined), false);
+});
+
+test('accepts a small genome block, rejects a stuffed one', () => {
+  const block = { name: 'Backup-wiping ransomware', actions: ['ExecFromTempOrCache'], attack_ids: ['T1204'], cure: ['SigStop'], signers: 4, devices: 12 };
+  assert.strictEqual(validBlock(block), true);
+  assert.strictEqual(validBlock({ ...block, name: 'x'.repeat(500) }), false);
+  assert.strictEqual(validBlock({ ...block, cure: ['x'.repeat(41)] }), false);
+  assert.strictEqual(validBlock({ ...block, signers: '4' }), false);
 });
 
 test('parses a JSON review wrapped in prose, falls back to plain text', () => {

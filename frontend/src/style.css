@@ -445,3 +445,11 @@ body[data-alert='watching'] .advisor-avatar canvas, body[data-alert='isolated'] 
 @media (prefers-reduced-motion: reduce) {
   .live-dot, .pair-dot, .edge-cue svg, .c-body, #mesh .links .flow { animation: none !important; }
 }
+
+/* Genome detail: the advisor explains the open block in plain words */
+.d-say { --voice: #f2c84b; display: grid; gap: 10px; }
+.d-bubble { position: relative; padding: 14px 16px; border-radius: 14px; background: var(--raise); border: 1px solid rgb(242 200 75 / 0.3); color: #d7e0e8; font-size: 14px; line-height: 1.55; }
+.d-bubble::after { content: ''; position: absolute; left: 30px; bottom: -7px; width: 12px; height: 12px; background: var(--raise); border: solid rgb(242 200 75 / 0.3); border-width: 0 1px 1px 0; transform: rotate(45deg); } /* tail down to the d20 */
+.d-speaker { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 12.5px; }
+.d-speaker .advisor-avatar { width: 72px; flex: none; cursor: pointer; }
+.d-bubble.thinking { color: var(--muted); }
