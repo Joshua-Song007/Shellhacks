@@ -26,7 +26,7 @@ struct Args {
 
 fn parse_args() -> Args {
     let mut rpc = None;
-    let mut interval_secs = 5;
+    let mut interval_secs = 10; // public devnet 429s getProgramAccounts quickly; this leaves Soldier's own reads headroom
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -76,8 +76,8 @@ fn main() {
             Err(e) => emit(serde_json::json!({"type": "error", "source": "recent_signatures", "message": e.to_string()})),
         }
 
-        let genomes = match client.all_genomes() {
-            Ok(genomes) => {
+        let accounts = match client.all_accounts() {
+            Ok((threats, genomes)) => {
                 let changes = genome_diff(&genomes, &mut seen_genomes);
                 // Genomes are emitted on the first tick too: they're the chain's
                 // standing immune memory, so the dashboard loads what's already
@@ -91,24 +91,19 @@ fn main() {
                         "epigenetic_status": g.epigenetic_status,
                     }));
                 }
-                Some(genomes)
+                Some((threats, genomes))
             }
             Err(e) => {
-                emit(serde_json::json!({"type": "error", "source": "all_genomes", "message": e.to_string()}));
+                emit(serde_json::json!({"type": "error", "source": "all_accounts", "message": e.to_string()}));
                 None
             }
         };
 
         // Network-wide totals for the Global genome window, emitted every tick:
         // a window opened after startup has no replay, so on-change-only left it at 0.
-        if let Some(genomes) = genomes {
-            match client.all_threats() {
-                Ok(threats) => {
-                    let (cures, devices) = network_stats(&genomes, &threats);
-                    emit(serde_json::json!({"type": "network_stats", "cures": cures, "devices": devices}));
-                }
-                Err(e) => emit(serde_json::json!({"type": "error", "source": "all_threats", "message": e.to_string()})),
-            }
+        if let Some((threats, genomes)) = accounts {
+            let (cures, devices) = network_stats(&genomes, &threats);
+            emit(serde_json::json!({"type": "network_stats", "cures": cures, "devices": devices}));
         }
 
         first_tick = false;

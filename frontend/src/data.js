@@ -777,6 +777,20 @@ function onSoldier(payload) {
   if (payload.ledger.submit_sig) pendingLedger.set(payload.ledger.submit_sig, { kind: 'submit_threat', threatId: payload.threat_id, name, mine: true });
   for (const sig of payload.ledger.commit_sigs) pendingLedger.set(sig, { kind: 'commit_gene', threatId: payload.threat_id, gene: payload.gene_hash, name, mine: true });
   for (const err of payload.ledger.errors) log('ledger', 'warn', err);
+  // Evolve{commit:false} (soldier main.rs): the chain read failed (e.g. devnet
+  // 429) or held an unusable upload, so Soldier applied the cure locally and
+  // published nothing -- no commit signature is ever coming. Finish the
+  // incident as local-only instead of waiting on "On chain" forever.
+  if (payload.source === 'evolved' && payload.applied && !payload.ledger.commit_sigs.length) {
+    inc.localOnly = true;
+    inc.done = true;
+    inc.marks.immune = Date.now();
+    log('ledger', 'warn', 'cure applied on this device only; not published (chain unreachable or rate-limited). Run the test again to retry.');
+    setStatus(state.self, 'cured');
+    scheduleCuredRevert(state.self);
+    emit('incident', { device: state.self, phase: 'cured', threat: name });
+    changed();
+  }
 }
 
 function onLedger(payload) {

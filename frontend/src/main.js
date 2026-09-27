@@ -565,6 +565,7 @@ function renderIncident() {
   let foot = '';
   if (inc.suppress?.done) foot = '<p class="sup-done">Cure turned off on every device. Epigenetic_Status is now suppressed, so no node will run it.</p>';
   else if (inc.suppress) foot = `<p class="sup-wait">Turning off the cure: ${inc.suppress.sigs} of 3 signatures</p>`;
+  else if (inc.localOnly) foot = '<p class="sup-wait">Fixed on this Mac only. The Solana network didn\'t answer (usually devnet rate limits), so this cure wasn\'t published for other devices. Clear the test and run it again to retry.</p>';
   else if (inc.marks.commit) foot = '<button class="btn-ghost" id="suppress">Turn off this cure</button><p>Use this if the cure breaks a legitimate app. It needs 3 of 5 signatures.</p>';
 
   $('#inc-body').innerHTML = `${tree}<h3>Cure search</h3>${search}<div class="inc-foot">${foot}</div>`;

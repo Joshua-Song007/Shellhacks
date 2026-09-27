@@ -228,14 +228,22 @@ impl LedgerClient {
             .collect())
     }
 
-    /// Every Threat Registry account this program owns; same mixed-account
-    /// filter as `all_genomes`, from the other side.
-    pub fn all_threats(&self) -> Result<Vec<t_cell::ThreatRegistry>, LedgerError> {
+    /// Every Threat Registry AND Genome Registry account in ONE
+    /// `get_program_accounts` call -- public devnet rate-limits that method
+    /// hard (429 after a handful), and a rate-limited Soldier read fails open
+    /// into evolve-without-commit.
+    pub fn all_accounts(&self) -> Result<(Vec<t_cell::ThreatRegistry>, Vec<t_cell::GenomeRegistry>), LedgerError> {
         let accounts = self.rpc.get_program_accounts(&self.program_id).map_err(LedgerError::Rpc)?;
-        Ok(accounts
-            .into_iter()
-            .filter_map(|(_, account)| t_cell::ThreatRegistry::try_deserialize(&mut account.data.as_slice()).ok())
-            .collect())
+        let mut threats = Vec::new();
+        let mut genomes = Vec::new();
+        for (_, account) in accounts {
+            if let Ok(t) = t_cell::ThreatRegistry::try_deserialize(&mut account.data.as_slice()) {
+                threats.push(t);
+            } else if let Ok(g) = t_cell::GenomeRegistry::try_deserialize(&mut account.data.as_slice()) {
+                genomes.push(g);
+            }
+        }
+        Ok((threats, genomes))
     }
 
     fn fetch<T: AccountDeserialize>(&self, pda: Pubkey) -> Result<Option<T>, LedgerError> {
