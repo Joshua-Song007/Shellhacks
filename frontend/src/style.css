@@ -125,7 +125,9 @@ body[data-alert='cured'] .live-dot { background: var(--t); box-shadow: 0 0 10px 
 
 /* Local genome */
 .memory { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
-.memory #open-genome { justify-self: stretch; justify-content: center; margin-top: 14px; }
+.memory-actions { display: flex; gap: 8px; margin-top: 14px; }
+.memory-actions #open-genome { flex: 1; justify-content: center; }
+.memory-actions #clear-genome { flex: none; }
 .gl-box { position: relative; min-height: 0; margin: 0 -22px; border-block: 1px solid var(--faint); }
 .gl-full { border: 0; }
 .gl-box canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }

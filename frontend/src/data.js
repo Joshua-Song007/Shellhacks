@@ -3,6 +3,7 @@
 // calls emit() with the same event names:
 //   'devices'  state.devices changed (status/heartbeat)
 //   'genes'    state.genes changed (a cure was learned)
+//   'genome-clear' state.genes reset to empty (local cure history cleared, not a learn)
 //   'block'    detail = block, also pushed to state.blocks (and state.contributions if mine)
 //   'mesh'     detail = { from, to: [ids] } a cure hint travelled the lymph network
 //   'incident' detail = { device, phase: 'watching'|'isolated'|'cured'|'clear', threat }
@@ -413,6 +414,18 @@ export function inject() {
 export function clearIncident() {
   state.incident = null;
   emit('threat', null);
+}
+
+// Wipes this device's local cure history (the "Immune memory" helix), demo-visible proof
+// that local memory is disposable: Soldier's own FR-L-7 check (main.rs) always re-fetches
+// the Genome Registry from the chain at wake time regardless of anything in this dashboard,
+// so a real recurring threat is still inherited from the network with nothing lost here.
+// A distinct event, not 'genes' (documented above as "a cure was learned", append-only) --
+// main.js's existing 'genes' listener unconditionally does state.genes.at(-1).gene, which
+// would throw on an empty array.
+export function clearLocalGenome() {
+  state.genes = [];
+  emit('genome-clear');
 }
 
 // ---------- Live translator (Phase 9 item 11): scout/soldier/mesh/ledger NDJSON -> the SAME feed contract above ----------

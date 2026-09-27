@@ -98,10 +98,13 @@
           <span class="end-label top" aria-hidden="true">Newest</span>
           <span class="end-label bottom" aria-hidden="true">Oldest</span>
         </div>
-        <button class="btn" id="open-genome">
-          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M11 4h5v5M16 4l-7 7M14 12v4H4V6h4" /></svg>
-          Open global genome
-        </button>
+        <div class="memory-actions">
+          <button class="btn" id="open-genome">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M11 4h5v5M16 4l-7 7M14 12v4H4V6h4" /></svg>
+            Open global genome
+          </button>
+          <button class="btn btn-line btn-sm" id="clear-genome" title="Clears this device's own cure history. Safe: if the same threat returns, your system still checks the network for a known cure.">Clear local</button>
+        </div>
       </section>
 
       <section class="panel contrib" aria-labelledby="contrib-title">

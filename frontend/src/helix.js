@@ -326,5 +326,26 @@ export function createHelix(canvas, { hashes, capacity = 160, tilt = 0, bg = nul
       const [x, y] = screenOf(tmp.copy(centers[i]).applyMatrix4(root.matrixWorld));
       return { x, y };
     },
+    // Empty the strand back to nothing. frame() only ever writes matrices for i < count,
+    // so shrinking count alone would leave the last-rendered instances frozen visible;
+    // zero them out here the same way the initial N-capacity setup above does.
+    clear() {
+      for (let i = 0; i < count; i++) {
+        nodes.setMatrixAt(i * 2, zero);
+        nodes.setMatrixAt(i * 2 + 1, zero);
+        rungs.setMatrixAt(i, zero);
+        blocks.setMatrixAt(i, zero);
+      }
+      nodes.instanceMatrix.needsUpdate = rungs.instanceMatrix.needsUpdate = blocks.instanceMatrix.needsUpdate = true;
+      count = 0;
+      seq.length = 0;
+      colA.length = 0;
+      colB.length = 0;
+      colBlock.length = 0;
+      born.fill(-1);
+      hover = -1;
+      pinned = -1;
+      follow = true;
+    },
   };
 }

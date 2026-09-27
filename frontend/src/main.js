@@ -1,5 +1,5 @@
 import gsap from 'gsap';
-import { feed, state, inject, clearIncident, suppress, ALLELES, ACT_LABEL, ATTACK, THREATS, evaluate, startPairing, cancelPairing, revoke, joinByUri, getReview, watchingLineages, pauseLineage, resumeLineage, escalateLineage, dismissLineage } from './data.js';
+import { feed, state, inject, clearIncident, suppress, ALLELES, ACT_LABEL, ATTACK, THREATS, evaluate, startPairing, cancelPairing, revoke, joinByUri, getReview, watchingLineages, pauseLineage, resumeLineage, escalateLineage, dismissLineage, clearLocalGenome } from './data.js';
 import QRCode from 'qrcode';
 import { createHelix } from './helix.js';
 import { createMesh, LABEL, GLYPH } from './mesh.js';
@@ -686,6 +686,11 @@ feed.addEventListener('genes', () => {
   helix.add(state.genes.at(-1).gene);
   renderHealth();
 });
+feed.addEventListener('genome-clear', () => {
+  helix.clear();
+  renderHealth();
+});
+$('#clear-genome').addEventListener('click', clearLocalGenome);
 feed.addEventListener('block', ({ detail }) => {
   if (detail.mine) renderContrib();
   renderLedger();

@@ -53,7 +53,7 @@ function defaultConfig() {
     feedBin: path.join(ROOT, 'target/debug/examples/feed'),
     suppressBin: path.join(ROOT, 'target/debug/examples/suppress'),
     testThreatScript: path.join(ROOT, 'scripts/test_threat.sh'),
-    scoutMode: process.env.TCELL_SCOUT_MODE || 'libproc', // NFR-3: no-root default
+    scoutMode: process.env.TCELL_SCOUT_MODE || 'eslogger', // attempt full (root) detection by default, spawnScout falls back to --libproc (NFR-3, no-root) on a declined/failed prompt; TCELL_SCOUT_MODE=libproc opts out of the prompt entirely
     rpcUrl: process.env.TCELL_RPC_URL || null, // null -> each bin's own devnet default
     poiKeys: [1, 2, 3, 4, 5].map((n) => path.join(ROOT, `crates/ledger-program/keys/poi-${n}.json`)),
     trace: path.join(ROOT, 'crates/soldier/traces/demo_ransomware.ndjson'),
@@ -217,22 +217,24 @@ function tryParseJson(line) {
 // Generic spawn+NDJSON-bridge with auto-restart. `onLine` gets the raw
 // stdout line (parsing is the caller's job, since every source here
 // already speaks NDJSON but the record shapes differ per source).
-function spawnLineReader(events, name, cmd, args, { onLine, restart, stdin } = {}) {
+function spawnLineReader(events, name, cmd, args, { onLine, restart, stdin, env, onExit } = {}) {
   let stopped = false;
   let child = null;
 
   function launch() {
     if (!fs.existsSync(cmd)) {
       events.emit('error', { source: name, message: `binary not found: ${cmd} (run cargo build --workspace --examples first)` });
+      onExit?.();
       return;
     }
-    child = spawn(cmd, args, { stdio: [stdin ? 'pipe' : 'ignore', 'pipe', 'pipe'] });
+    child = spawn(cmd, args, { stdio: [stdin ? 'pipe' : 'ignore', 'pipe', 'pipe'], env: env ?? process.env });
     readline.createInterface({ input: child.stdout }).on('line', (line) => onLine && onLine(line));
     readline.createInterface({ input: child.stderr }).on('line', (line) => console.error(`[${name}] ${line}`));
     child.on('exit', (code, signal) => {
       if (stopped) return;
       events.emit('error', { source: name, message: `exited (code=${code}, signal=${signal})` });
       if (restart) setTimeout(launch, RESPAWN_DELAY_MS);
+      onExit?.();
     });
   }
 
@@ -309,14 +311,69 @@ function scoutArgs(cfg) {
   return [...base, '--wake-socket', cfg.wakeSocketPath];
 }
 
+const ASKPASS_HELPER = path.join(__dirname, 'askpass.applescript');
+
 function scoutSpawn(cfg) {
   if (cfg.scoutMode === 'eslogger') {
-    // Best-effort: requires an already-cached sudo timestamp (`sudo -v` run
-    // beforehand by the operator). No interactive-sudo UX is attempted
-    // here -- deliberate simplification, see plan.md.
-    return { cmd: '/usr/bin/sudo', args: ['-n', cfg.scoutBin, ...scoutArgs(cfg)] };
+    // -A (askpass): sudo invokes SUDO_ASKPASS -- a real GUI password prompt
+    // (askpass.applescript's "display dialog ... with hidden answer") --
+    // instead of trying to read a password from a TTY, since there is none
+    // here (Electron spawns with stdio ['ignore','pipe','pipe']). A
+    // cancelled/failed prompt makes sudo itself fail fast with no stdout
+    // ever produced; spawnScout (below) treats that as "declined" and falls
+    // back to --libproc rather than retrying the same prompt in a loop.
+    return { cmd: '/usr/bin/sudo', args: ['-A', cfg.scoutBin, ...scoutArgs(cfg)], env: { ...process.env, SUDO_ASKPASS: ASKPASS_HELPER } };
   }
   return { cmd: cfg.scoutBin, args: scoutArgs(cfg) };
+}
+
+// Wraps scoutSpawn/spawnLineReader with the elevation-decline fallback: in
+// 'eslogger' mode, attempt the real (privileged) path first every launch; if
+// the elevated attempt exits WITHOUT ever having produced a single stdout
+// line (declined password prompt, wrong password exhausting sudo's own
+// retries, or eslogger otherwise unavailable even as root -- e.g. missing
+// Full Disk Access, a SEPARATE macOS TCC grant this prompt cannot itself
+// satisfy, see plan.md), fall back once to plain --libproc (NFR-3, no root)
+// instead of re-showing the same prompt forever. If it DID produce output
+// (a real elevated session that later crashes for an unrelated reason), the
+// normal restart:true retry re-attempts the SAME elevated path -- sudo's own
+// timestamp cache usually avoids re-prompting for a quick respawn.
+// cfg.scoutMode !== 'eslogger' (an explicit TCELL_SCOUT_MODE=libproc opt-out)
+// skips all of this and behaves exactly as before, no prompt at all.
+function spawnScout(events, cfg, onLine) {
+  if (cfg.scoutMode !== 'eslogger') return spawnLineReader(events, 'scout', cfg.scoutBin, scoutArgs(cfg), { restart: true, onLine });
+
+  let current = null;
+
+  function launchElevated() {
+    let sawLine = false;
+    const scoutCmd = scoutSpawn(cfg);
+    current = spawnLineReader(events, 'scout', scoutCmd.cmd, scoutCmd.args, {
+      restart: false, // this wrapper owns the retry/fallback decision, not spawnLineReader's own loop
+      env: scoutCmd.env,
+      onLine: (line) => {
+        sawLine = true;
+        onLine(line);
+      },
+      onExit: () => {
+        if (sawLine) setTimeout(launchElevated, RESPAWN_DELAY_MS);
+        else {
+          events.emit('error', { source: 'scout', message: 'administrator access declined or unavailable; continuing with reduced (no-root) detection' });
+          current = spawnLineReader(events, 'scout', cfg.scoutBin, scoutArgs({ ...cfg, scoutMode: 'libproc' }), { restart: true, onLine });
+        }
+      },
+    });
+  }
+
+  launchElevated();
+  return {
+    get child() {
+      return current.child;
+    },
+    stop() {
+      current.stop();
+    },
+  };
 }
 
 // FIFO relay: Scout connects once per wake, writes one WakeSignal JSON
@@ -472,16 +529,12 @@ function startBackend(overrides = {}) {
   events.on('error', () => {});
 
   const advisor = makeAdvisorRelay(events, cfg);
-  const scoutCmd = scoutSpawn(cfg);
-  const scout = spawnLineReader(events, 'scout', scoutCmd.cmd, scoutCmd.args, {
-    restart: true,
-    onLine: (line) => {
-      const record = tryParseJson(line);
-      if (record) {
-        events.emit('scout', record);
-        advisor.onScout(record);
-      }
-    },
+  const scout = spawnScout(events, cfg, (line) => {
+    const record = tryParseJson(line);
+    if (record) {
+      events.emit('scout', record);
+      advisor.onScout(record);
+    }
   });
 
   const meshdArgs = ['--identity', cfg.meshIdentity, '--state', cfg.meshState, '--port', String(cfg.meshPort), '--benign-trace', cfg.benignTrace];
