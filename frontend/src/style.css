@@ -86,11 +86,11 @@ body[data-alert='cured'] .live-dot { background: var(--t); box-shadow: 0 0 10px 
 
 /* Health: the one loud element */
 .health {
-  display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 30px; padding: 26px 32px;
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: clamp(18px, 2vw, 30px); padding: 26px clamp(20px, 2.2vw, 32px);
   background: radial-gradient(120% 90% at 18% 50%, color-mix(in srgb, var(--s) 13%, transparent), transparent 60%), var(--panel);
   transition: background 0.8s;
 }
-.ring-wrap { width: clamp(160px, min(22vw, 30vh), 250px); aspect-ratio: 1; }
+.ring-wrap { width: clamp(150px, min(18vw, 30vh), 250px); aspect-ratio: 1; }
 .ring { width: 100%; height: 100%; overflow: visible; }
 .ring circle { fill: none; }
 .ring-orbit { stroke: var(--faint); stroke-width: 1; stroke-dasharray: 2 7; }
@@ -100,12 +100,12 @@ body[data-alert='cured'] .live-dot { background: var(--t); box-shadow: 0 0 10px 
 .health h1 { font: 500 clamp(24px, 2.6vw, 34px)/1.12 var(--display); letter-spacing: -0.01em; max-width: 22ch; }
 .health-copy { min-width: 0; } /* let the middle column give way to the ring and advisor instead of pushing out of the panel */
 .health-copy > p { color: #b9c6d4; font-size: 16px; line-height: 1.55; margin-top: 12px; max-width: 42ch; }
-.facts { display: flex; flex-wrap: wrap; row-gap: 12px; width: max-content; max-width: 100%; margin-top: 26px; border-top: 1px solid var(--faint); } /* the rule hugs the stats; if space ever runs out a whole stat wraps, never its number */
-.facts div { padding: 14px clamp(16px, 2.2vw, 32px) 0; } /* columns hug their content with the same gap either side of each divider */
+.facts { display: grid; grid-template-columns: repeat(3, auto); width: max-content; max-width: 100%; margin-top: 26px; border-top: 1px solid var(--faint); } /* one row, always; the rule hugs the stats; when space runs short the labels wrap, never the numbers */
+.facts div { padding: 14px clamp(10px, 1.6vw - 4px, 28px) 0; } /* columns hug their content with the same gap either side of each divider */
 .facts div:first-child { padding-left: 0; }
 .facts div + div { border-left: 1px solid var(--faint); }
-.facts dt { color: var(--muted); font-size: 12.5px; white-space: nowrap; margin-top: 4px; }
-.facts dd { font: 400 clamp(20px, 1.7vw, 24px)/1.2 var(--display); font-variant-numeric: tabular-nums; white-space: nowrap; } /* '12 of 12' stays one unit */
+.facts dt { color: var(--muted); font-size: 12.5px; line-height: 1.35; text-wrap: balance; margin-top: 4px; }
+.facts dd { font: 400 clamp(18px, 1.8vw - 1px, 24px)/1.2 var(--display); font-variant-numeric: tabular-nums; white-space: nowrap; } /* '12 of 12' stays one unit */
 
 /* Mesh */
 .mesh { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
