@@ -328,6 +328,7 @@ const helix = createHelix($('#local-gl'), {
   length: 0.9,
   thickness: 0.62,
   reduced,
+  glow: 0.35,
   edgeScroll: true,
   visible: 14,
   onSelect: (h) => openGenome(state.genes[h.index]),

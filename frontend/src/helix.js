@@ -17,7 +17,7 @@ const baseOf = (hash) => 'ATGC'[parseInt(hash.slice(0, 2), 16) % 4];
 // edgeScroll: hovering the top/bottom band of the box scrolls along the strand (and so does the wheel); onSelect(hit) fires on a block click.
 // edgeTop: px at the top that never scroll (window chrome overlaid on the canvas).
 // visible: the strand stops shrinking past this many blocks; the rest scroll (needs edgeScroll). It opens on the newest, and returns there when a cure is added.
-export function createHelix(canvas, { hashes, capacity = 160, tilt = 0, bg = null, length = 0.86, thickness = 0.55, particles = 300, reduced = false, edgeScroll = false, edgeTop = 0, visible = Infinity, onHover = () => {}, onSelect = null, onEdge = () => {} }) {
+export function createHelix(canvas, { hashes, capacity = 160, tilt = 0, bg = null, length = 0.86, thickness = 0.55, particles = 300, reduced = false, glow = 1, edgeScroll = false, edgeTop = 0, visible = Infinity, onHover = () => {}, onSelect = null, onEdge = () => {} }) {
   const SP = 0.34;
   const R = 0.62;
   const TWIST = 0.36;
@@ -99,7 +99,7 @@ export function createHelix(canvas, { hashes, capacity = 160, tilt = 0, bg = nul
 
   const composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
-  const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.8, 0.55, 0.12);
+  const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.8 * glow, 0.55 * Math.sqrt(glow), 0.12) // glow < 1 for a small panel: less dark margin to bleed into;
   composer.addPass(bloom);
   composer.addPass(new OutputPass());
 
