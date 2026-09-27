@@ -190,7 +190,8 @@ async function beginPairing() {
   const code = await startPairing();
   // Light modules on dark: phone cameras read either, and this keeps the panel from flashing white.
   $('#pair-qr').innerHTML = await QRCode.toString(code.uri, { type: 'svg', margin: 0, errorCorrectionLevel: 'M', color: { dark: '#e6eef0', light: '#0000' } });
-  $('#pair-hex').textContent = code.nonce.match(/.{4}/g).join(' ');
+  // Live joins need the whole link (it carries this device's address), not just the nonce.
+  $('#pair-hex').textContent = state.source === 'live' ? code.uri : code.nonce.match(/.{4}/g).join(' ');
   $('#pair-copy').textContent = 'Copy';
   stopPairClock();
   const left = () => {
@@ -228,26 +229,33 @@ pairDlg.addEventListener('click', (e) => {
     stopPairClock();
     $('#join-wait').hidden = false;
     joinByUri(uri);
+    // meshd reports an unreachable address only after the OS connect timeout; don't leave the dialog hanging that long.
+    clearTimeout(joinTimer);
+    joinTimer = setTimeout(() => pairDlg.open && !$('#join-wait').hidden && feed.dispatchEvent(new CustomEvent('pair', { detail: { phase: 'error', error: 'unreachable' } })), 15000);
   }
   if (act === 'revoke') {
     revoke(removing);
     closePairing();
   }
 });
+let joinTimer;
 const FAIL = {
   expired: ['This code expired', "Codes last 5 minutes so an old one can't be reused. Get a new code and try again."],
   Expired: ['This code expired', "The device used the code after it ran out. Get a new code and try again."],
   NonceMismatch: ['That code didn’t match', 'A device presented a different code and was refused. Get a new code and scan it again.'],
+  unreachable: ['Couldn’t reach that device', 'Both devices need to be on the same network, and some campus or public Wi-Fi blocks devices from talking to each other. Try a phone hotspot.'],
+  'malformed uri': ['That isn’t a pairing link', 'Paste the whole link that starts with tcell://pair from the other device.'],
 };
 feed.addEventListener('pair', ({ detail }) => {
   if (!pairDlg.open || removing) return;
   stopPairClock();
+  clearTimeout(joinTimer);
   if (detail.phase === 'paired') {
     $('#pair-done').textContent = `${detail.device.name} joined`;
     $('#pair-glyph').setAttribute('d', GLYPH[detail.device.kind]);
     return pairStep('paired');
   }
-  const [title, body] = FAIL[detail.error ?? 'expired'];
+  const [title, body] = FAIL[detail.error ?? 'expired'] ?? ['Couldn’t pair', `${detail.error}. Get a new code and try again.`];
   $('#pair-fail-title').textContent = title;
   $('#pair-fail').textContent = body;
   pairStep('failed');

@@ -22,12 +22,12 @@ use ledger_client::LedgerClient;
 use libp2p::identity::{Keypair, PeerId, PublicKey};
 use libp2p::multiaddr::Protocol;
 use libp2p::request_response::{self, ProtocolSupport};
-use libp2p::swarm::{NetworkBehaviour, Swarm, SwarmEvent};
+use libp2p::swarm::{ConnectionId, NetworkBehaviour, Swarm, SwarmEvent, dial_opts::DialOpts};
 use libp2p::{Multiaddr, StreamProtocol, ping};
 use mesh::identity::{Identity, PairingCode, Roster};
 use mesh::message::CureHint;
 use mesh::revocation::RevocationList;
-use mesh::transport::{build_swarm, dial, listen_on};
+use mesh::transport::{build_swarm, listen_on};
 use mesh::verify::{self, CorroborationTracker, Decision, Stage3Regression, VerifiedHashCache};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -219,6 +219,8 @@ struct MeshState {
     corroboration: CorroborationTracker,
     pending_code: Option<PairingCode>,
     pending_join_nonce: Option<String>,
+    /// Outstanding pair_join dials; when the last one fails the joiner gets a pair_error instead of silence.
+    pending_join_dials: std::collections::HashSet<ConnectionId>,
     pending_pair_requests: std::collections::HashSet<request_response::OutboundRequestId>,
     listen_addrs: Vec<Multiaddr>,
     peer_id_of: HashMap<PublicKey, PeerId>,
@@ -238,6 +240,7 @@ impl MeshState {
             corroboration: CorroborationTracker::new(),
             pending_code: None,
             pending_join_nonce: None,
+            pending_join_dials: Default::default(),
             pending_pair_requests: Default::default(),
             listen_addrs: Vec::new(),
             peer_id_of: HashMap::new(),
@@ -370,7 +373,17 @@ async fn handle_swarm_event(
             emit(json!({"type": "listening", "addr": address.to_string()}));
             state.listen_addrs.push(address);
         }
-        SwarmEvent::ConnectionEstablished { peer_id, .. } => {
+        SwarmEvent::OutgoingConnectionError { connection_id, error, .. } => {
+            if state.pending_join_dials.remove(&connection_id) && state.pending_join_dials.is_empty() && state.pending_join_nonce.take().is_some() {
+                eprintln!("meshd: pair_join dial failed: {error}");
+                emit(json!({"type": "pair_error", "error": "unreachable"}));
+            }
+        }
+        SwarmEvent::ConnectionEstablished { peer_id, connection_id, .. } => {
+            if !state.pending_join_dials.remove(&connection_id) {
+                return; // a persisted-peer redial, not this pairing's dial
+            }
+            state.pending_join_dials.clear();
             if let Some(nonce_hex) = state.pending_join_nonce.take() {
                 let request = WireRequest::Pair { nonce_hex, pubkey: identity.public().encode_protobuf() };
                 let request_id = swarm.behaviour_mut().rr.send_request(&peer_id, request);
@@ -564,13 +577,14 @@ fn handle_stdin_line(line: &str, swarm: &mut Swarm<MeshBehaviour>, state: &mut M
 fn cmd_pair_start(swarm: &mut Swarm<MeshBehaviour>, state: &mut MeshState, identity: &Identity) {
     let code = PairingCode::generate(identity);
     let nonce_hex = hex_encode(&code.nonce());
-    let addr = state
-        .listen_addrs
-        .iter()
-        .find(|a| !is_loopback(a))
-        .or_else(|| state.listen_addrs.first())
-        .and_then(addr_to_ip_port)
-        .unwrap_or_else(|| "127.0.0.1:0".to_string());
+    // Every non-loopback address, comma-separated: which interface the peer
+    // can reach (Wi-Fi vs a VM bridge) isn't knowable here, so the joiner tries all.
+    let lan: Vec<String> = state.listen_addrs.iter().filter(|a| !is_loopback(a)).filter_map(addr_to_ip_port).collect();
+    let addr = if lan.is_empty() {
+        state.listen_addrs.first().and_then(addr_to_ip_port).unwrap_or_else(|| "127.0.0.1:0".to_string())
+    } else {
+        lan.join(",")
+    };
     let uri = build_pair_uri(&addr, *swarm.local_peer_id(), &nonce_hex);
     emit(json!({"type": "pair_code", "uri": uri, "expires_ms": 300_000}));
     state.pending_code = Some(code);
@@ -581,15 +595,28 @@ fn cmd_pair_join(uri: &str, swarm: &mut Swarm<MeshBehaviour>, state: &mut MeshSt
         emit(json!({"type": "pair_error", "error": "malformed uri"}));
         return;
     };
-    let Some((ip_str, port_str)) = addr.rsplit_once(':') else {
-        emit(json!({"type": "pair_error", "error": "malformed addr"}));
-        return;
-    };
-    let (Ok(ip), Ok(port)) = (ip_str.parse(), port_str.parse()) else {
-        emit(json!({"type": "pair_error", "error": "malformed addr"}));
-        return;
-    };
-    if dial(swarm, ip, port).is_err() {
+    let mut targets = Vec::new();
+    for one in addr.split(',') {
+        let Some((ip_str, port_str)) = one.rsplit_once(':') else {
+            emit(json!({"type": "pair_error", "error": "malformed addr"}));
+            return;
+        };
+        let (Ok(ip), Ok(port)) = (ip_str.parse::<std::net::IpAddr>(), port_str.parse::<u16>()) else {
+            emit(json!({"type": "pair_error", "error": "malformed addr"}));
+            return;
+        };
+        let proto = if ip.is_ipv4() { "ip4" } else { "ip6" };
+        targets.push(format!("/{proto}/{ip}/tcp/{port}").parse::<Multiaddr>().expect("valid multiaddr"));
+    }
+    state.pending_join_dials.clear();
+    for target in targets {
+        let opts = DialOpts::unknown_peer_id().address(target).build();
+        let id = opts.connection_id();
+        if swarm.dial(opts).is_ok() {
+            state.pending_join_dials.insert(id);
+        }
+    }
+    if state.pending_join_dials.is_empty() {
         emit(json!({"type": "pair_error", "error": "dial failed"}));
         return;
     }

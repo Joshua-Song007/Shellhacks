@@ -597,6 +597,7 @@ function onMesh(payload) {
     emit('devices', state.devices);
     return;
   }
+  if (payload.type === 'pair_error') emit('pair', { phase: 'error', error: payload.error });
   log('mesh', payload.type === 'pair_error' ? 'warn' : 'info', JSON.stringify(payload)); // listening/pair_error/hint
 }
 
