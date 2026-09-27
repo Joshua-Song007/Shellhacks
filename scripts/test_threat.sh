@@ -40,4 +40,7 @@ else
 fi
 cp "$WORK/payload" "$WORK/tmutil"
 
+# The burst writes into the cwd; a Finder-launched app's cwd is "/" (not
+# writable), which made the payload exit on its first file.
+cd "$WORK"
 "$WORK/payload" burst
