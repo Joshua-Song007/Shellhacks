@@ -518,7 +518,9 @@ function renderIncident() {
 
   const S = inc.search;
   let search = '<p class="al-sum">The cure search starts once the threat is frozen.</p>';
-  if (S) {
+  if (inc.inheritedGene) {
+    search = `<p class="al-sum">This cure was already known network-wide -- inherited gene <code>${short(inc.gene)}</code>, no local search needed.</p>`;
+  } else if (S) {
     const searching = !inc.gene;
     const cls = (m, r) => {
       if (m >= S.tested) return m & (1 << r) ? 'c b' : 'c';

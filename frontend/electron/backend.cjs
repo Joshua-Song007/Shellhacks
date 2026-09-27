@@ -263,7 +263,7 @@ function scoutSpawn(cfg) {
     // Best-effort: requires an already-cached sudo timestamp (`sudo -v` run
     // beforehand by the operator). No interactive-sudo UX is attempted
     // here -- deliberate simplification, see plan.md.
-    return { cmd: 'sudo', args: ['-n', cfg.scoutBin, ...scoutArgs(cfg)] };
+    return { cmd: '/usr/bin/sudo', args: ['-n', cfg.scoutBin, ...scoutArgs(cfg)] };
   }
   return { cmd: cfg.scoutBin, args: scoutArgs(cfg) };
 }
@@ -407,6 +407,16 @@ function startHostStatsPoller(events, getPids) {
 function startBackend(overrides = {}) {
   const cfg = { ...defaultConfig(), ...overrides };
   const events = new EventEmitter();
+  // Node's EventEmitter throws (crashing this process) if an 'error' event
+  // fires with zero listeners attached -- a real risk here, since a few
+  // launch()-time checks below (spawnLineReader) can emit 'error'
+  // synchronously, before main.cjs (the caller) has gotten `events` back
+  // from startBackend() and attached its own forwarding listener. This
+  // permanent no-op listener makes 'error' behave like every other channel
+  // here (an event to forward, never a thing that can crash the app);
+  // main.cjs's real listener still receives it too, EventEmitter fans out
+  // to every listener, not just the first one registered.
+  events.on('error', () => {});
 
   const advisor = makeAdvisorRelay(events, cfg);
   const scoutCmd = scoutSpawn(cfg);

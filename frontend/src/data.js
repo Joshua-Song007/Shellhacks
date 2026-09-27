@@ -503,7 +503,12 @@ function onHostStats(payload) {
 
 function onSoldier(payload) {
   if (payload.type !== 'cure') return;
-  const inc = [...liveIncidents.values()].find((i) => i.threatId === payload.threat_id) ?? state.incident;
+  // threat_id is deterministic (scoring.rs FR-D-9): a repeat run of the same
+  // synthetic trigger reuses the SAME threat_id on a brand-new root_exe-keyed
+  // liveIncidents entry, so a plain scan-for-match lands on the oldest entry
+  // sharing that id, not the one actually on screen -- prefer state.incident
+  // whenever it's already the right target.
+  const inc = state.incident?.threatId === payload.threat_id ? state.incident : ([...liveIncidents.values()].find((i) => i.threatId === payload.threat_id) ?? state.incident);
   if (!inc) return;
   const changed = () => emit('threat', inc);
 
@@ -518,7 +523,15 @@ function onSoldier(payload) {
 
   if (payload.source === 'inherited') {
     inc.gene = payload.gene_hash;
+    inc.inheritedGene = true; // no local search ran; main.js's Cure search panel checks this
     log('soldier', 'ok', `gene inherited from network, gene_hash=${payload.gene_hash.slice(0, 16)}…`);
+    // Inherited means a cure for this exact threat_id is already committed
+    // and suppressed-checked on chain elsewhere (FR-L-7) -- there is no
+    // fresh commit_gene call for this run, so no ledger signature will ever
+    // arrive to resolve "On chain"/"Home immune" the normal way. Both are
+    // already true the instant this device adopts the existing cure.
+    inc.marks.commit = Date.now();
+    inc.marks.immune = Date.now();
   } else {
     // evolved: replay the EXISTING local search purely for the step-by-step
     // UI animation (real mirror of allele_search.rs, same fitness fn over
@@ -570,13 +583,15 @@ function onLedger(payload) {
     pushBlock({ kind: known.kind, threat: known.threatId, gene: known.gene, sig: payload.signature, mine: true, by: state.self, name: known.name, slot: payload.slot, time: t });
     log('ledger', 'ok', `${known.kind} ${payload.signature.slice(0, 12)}… confirmed`);
     if (known.kind !== 'commit_gene') return;
-    const inc = [...liveIncidents.values()].find((i) => i.threatId === known.threatId);
+    // Same stale-entry hazard as onSoldier above: prefer state.incident when it's already the right target.
+    const inc = state.incident?.threatId === known.threatId ? state.incident : [...liveIncidents.values()].find((i) => i.threatId === known.threatId);
     state.genes.push({ threat: known.threatId, gene: known.gene, name: known.name, from: state.self, time: Date.now(), bytes: undefined });
     emit('genes', state.genes);
     setStatus(state.self, 'cured');
     state.stoppedThisWeek++;
     if (inc) {
       inc.marks.commit = Date.now();
+      inc.marks.immune = Date.now(); // gene already applied locally by this point (Soldier applies before this ledger confirmation ever arrives); the network-durable half of "Home immune" just landed
       emit('threat', inc);
     }
     emit('incident', { device: state.self, phase: 'cured', threat: known.name });
