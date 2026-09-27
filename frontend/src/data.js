@@ -532,6 +532,19 @@ function onSoldier(payload) {
     // already true the instant this device adopts the existing cure.
     inc.marks.commit = Date.now();
     inc.marks.immune = Date.now();
+    // Real gap: `setStatus(..., 'cured')` otherwise only ever fires from
+    // onLedger's commit_gene confirmation (below) -- but Inherit never
+    // calls commit_gene (that's the point), so that confirmation was never
+    // going to arrive here. Without this, the device stayed on whatever
+    // status detection last set ('isolated') forever, even though the
+    // incident timeline itself already showed every step, including
+    // "Home immune", as done. state.genes is left untouched here (unlike
+    // onLedger's commit_gene branch) -- this device didn't just add a new
+    // chain entry, the gene got here via an earlier commit_gene or a
+    // 'genome' record ingest, both of which already populate it.
+    state.stoppedThisWeek++;
+    setStatus(state.self, 'cured');
+    emit('incident', { device: state.self, phase: 'cured', threat: inc.threat });
   } else {
     // evolved: replay the EXISTING local search purely for the step-by-step
     // UI animation (real mirror of allele_search.rs, same fitness fn over

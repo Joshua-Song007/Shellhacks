@@ -499,7 +499,14 @@ function tick() {
 const node = (id, title, sub, cls = '') => `<button class="node ${cls}" data-node="${id}"><span>${esc(title)}</span><small>${sub}</small></button>`;
 function renderIncident() {
   const inc = state.incident;
-  $('#inject').disabled = !!inc && !inc.done;
+  // NOT `!inc.done`: under a live eslogger Scout, ordinary background macOS
+  // activity (e.g. Spotlight/Biome agents) routinely trips a partial,
+  // never-convicted Stage-1 score, which claims state.incident (liveIncidentFor,
+  // data.js) and then never reaches `done` -- that permanently disabled this
+  // button. Only a real conviction (marks.detect, set solely on an actual
+  // Detection/SIGSTOP+wake, both here and in the simulated path) that hasn't
+  // yet finished (marks.immune) should block starting a new test.
+  $('#inject').disabled = !!inc && !!inc.marks.detect && !inc.marks.immune;
   if (!inc) {
     $('#inc-body').innerHTML = '<p class="empty">No threats yet. Scout is watching every process on this network. Run a test threat to see the full response.</p>';
     return;
