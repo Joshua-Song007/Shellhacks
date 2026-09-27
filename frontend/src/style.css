@@ -32,6 +32,16 @@ body {
 }
 button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
 :focus-visible { outline: 2px solid var(--a); outline-offset: 3px; }
+
+.boot {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  background: var(--abyss);
+  transition: opacity 0.5s ease;
+}
+.boot canvas { width: 100%; height: 100%; display: block; }
+.boot.hide { opacity: 0; pointer-events: none; }
 code { font-family: var(--mono); font-size: 0.92em; }
 [hidden] { display: none !important; }
 h2 { font: 500 15px/1.3 var(--display); letter-spacing: 0.01em; }

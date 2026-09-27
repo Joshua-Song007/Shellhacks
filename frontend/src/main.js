@@ -4,6 +4,7 @@ import QRCode from 'qrcode';
 import { createHelix } from './helix.js';
 import { createMesh, LABEL, GLYPH } from './mesh.js';
 import { createAdvisorAvatar } from './advisor.js';
+import { runBoot } from './boot.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -18,6 +19,25 @@ const sourceBadge = $('#source-badge');
 sourceBadge.hidden = false;
 sourceBadge.textContent = state.source === 'live' ? 'Live' : 'Simulated';
 sourceBadge.dataset.source = state.source;
+
+// Boot splash: the rest of this module's init (below) runs immediately and
+// unblocked underneath it -- the overlay just fades away once the one-shot
+// virus animation finishes (or the user skips it), it never gates real setup.
+(() => {
+  const boot = $('#boot');
+  const canvas = $('#boot-canvas');
+  if (!boot || !canvas) return;
+  const finish = () => {
+    boot.classList.add('hide');
+    boot.addEventListener('transitionend', () => boot.remove(), { once: true });
+  };
+  const skip = runBoot(canvas, finish);
+  boot.addEventListener('click', skip);
+  window.addEventListener('keydown', function onKey() {
+    skip();
+    window.removeEventListener('keydown', onKey);
+  }, { once: true });
+})();
 
 function ago(ms) {
   const s = Math.max(0, Math.round((Date.now() - ms) / 1000));
