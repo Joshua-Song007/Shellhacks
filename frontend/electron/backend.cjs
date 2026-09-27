@@ -28,7 +28,7 @@
 // THAT socket as the client and delivers the buffered wake -- so a wake
 // arriving during any respawn gap is queued, never dropped.
 
-const { spawn } = require('node:child_process');
+const { spawn, execFile } = require('node:child_process');
 const net = require('node:net');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
@@ -41,6 +41,7 @@ const ROOT = path.resolve(__dirname, '..', '..');
 const TCELL_HOME = path.join(os.homedir(), '.tcell');
 const RESPAWN_DELAY_MS = 500;
 const SOLDIER_READY_TIMEOUT_MS = 5000;
+const HOST_STATS_INTERVAL_MS = 5000; // matches scout's own --stats-every default (main.rs); same lightweight-periodic-poll pattern already used by source_beacon.rs's lsof lane (FR-D-11)
 
 function defaultConfig() {
   fs.mkdirSync(TCELL_HOME, { recursive: true });
@@ -284,6 +285,35 @@ class WakeRelay {
   }
 }
 
+// Real host-resource cost of the T-cell agent itself (NFR-2's "idle Scout
+// CPU cost shall be negligible" is exactly what this surfaces). No source
+// anywhere reports its own cpu/mem, so this polls `ps` for the PIDs already
+// spawned above -- soldier is deliberately excluded: it's short-lived and
+// self-terminates after exactly one wake+cure cycle, so it's rarely alive
+// at poll time and isn't part of the agent's steady-state footprint.
+function startHostStatsPoller(events, getPids) {
+  function poll() {
+    const pids = getPids();
+    if (pids.length === 0) return;
+    execFile('ps', ['-o', 'pid=,%cpu=,%mem=', '-p', pids.join(',')], (err, stdout) => {
+      if (err) return; // a pid exited mid-poll, or ps unavailable -- skip this tick, not fatal
+      let cpu = 0;
+      let mem = 0;
+      for (const line of stdout.trim().split('\n')) {
+        const parts = line.trim().split(/\s+/);
+        if (parts.length < 3) continue;
+        cpu += parseFloat(parts[1]) || 0;
+        mem += parseFloat(parts[2]) || 0;
+      }
+      events.emit('hoststats', { type: 'hoststats', cpu, mem, procs: pids.length });
+    });
+  }
+
+  poll();
+  const timer = setInterval(poll, HOST_STATS_INTERVAL_MS);
+  return { stop: () => clearInterval(timer) };
+}
+
 function startBackend(overrides = {}) {
   const cfg = { ...defaultConfig(), ...overrides };
   const events = new EventEmitter();
@@ -324,6 +354,10 @@ function startBackend(overrides = {}) {
   const relay = new WakeRelay(events, cfg);
   relay.start();
 
+  const hostStats = startHostStatsPoller(events, () =>
+    [scout.child?.pid, meshd.child?.pid, feed.child?.pid].filter((p) => typeof p === 'number'),
+  );
+
   return {
     events,
     sendMeshCommand(cmd) {
@@ -339,6 +373,7 @@ function startBackend(overrides = {}) {
       meshd.stop();
       feed.stop();
       relay.stop();
+      hostStats.stop();
     },
   };
 }

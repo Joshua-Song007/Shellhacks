@@ -349,6 +349,19 @@ export function inject() {
 const pendingLedger = new Map(); // signature -> { kind, threatId, gene, name, mine }
 const liveIncidents = new Map(); // keyed by root_exe (the only key both scout progress AND detection records carry)
 
+// Real System-panel stats tracking: eps/lag are derived from data Scout
+// already emits (no new wire mechanism); cpu/mem arrive via the 'hoststats'
+// channel (backend.cjs's ps poller, Phase 9 item 9 addendum).
+let lastAccepted = null;
+let lastAcceptedAt = null;
+let lastLagMs = null;
+function pushHistory() {
+  for (const k of ['cpu', 'mem', 'eps']) {
+    state.history[k].push(state.stats[k]);
+    if (state.history[k].length > 60) state.history[k].shift();
+  }
+}
+
 const schemaLabel = (schema) => schema.map((a) => ACT_LABEL[a] ?? a).join(', ');
 const deviceByPubkey = (pubkey) => state.devices.find((d) => d.pubkey === pubkey);
 
@@ -380,6 +393,9 @@ function onScout(payload) {
     inc.tree.acts.push({ action: p.action, weight: WEIGHT[p.action], attack: p.attack_id, tes: p.event });
     inc.threat = schemaLabel(inc.actions);
     log('scout', inc.score >= 100 ? 'alert' : 'warn', `lineage ${p.root_exe} +${WEIGHT[p.action]} ${p.action} (${p.attack_id}) score=${inc.score}/100`);
+    if (typeof p.event?.recv_ns === 'number' && typeof p.event?.ts_ns === 'number') {
+      lastLagMs = Math.max(0, (p.event.recv_ns - p.event.ts_ns) / 1e6); // real pipeline lag (NFR-1), ms precision only -- u64 ns round-trips JSON as a float64, sub-us error here doesn't matter
+    }
     changed();
     return;
   }
@@ -398,15 +414,28 @@ function onScout(payload) {
     return;
   }
   if (payload.type === 'stats') {
-    // cpu/mem/eps/lag have no real source from Scout (pipeline/host stats
-    // only) -- left frozen at their initial baseline, documented gap, no
-    // revisit scheduled. dropped/gaps ARE real.
     if (payload.pipeline) {
       state.stats.dropped = payload.pipeline.rejected;
       state.stats.gaps = payload.pipeline.seq_gap_events;
+      const now = Date.now();
+      if (lastAccepted !== null) {
+        const dtSeconds = (now - lastAcceptedAt) / 1000;
+        if (dtSeconds > 0) state.stats.eps = Math.max(0, Math.round((payload.pipeline.accepted - lastAccepted) / dtSeconds));
+      } // first stats tick has no prior sample to diff against -- baselines silently, matches source_beacon.rs's own "first snapshot never raises findings" convention
+      lastAccepted = payload.pipeline.accepted;
+      lastAcceptedAt = now;
+      if (lastLagMs !== null) state.stats.lag = +lastLagMs.toFixed(2);
+      pushHistory();
     }
     emit('stats', state.stats);
   }
+}
+
+function onHostStats(payload) {
+  state.stats.cpu = payload.cpu;
+  state.stats.mem = payload.mem;
+  pushHistory();
+  emit('stats', state.stats);
 }
 
 function onSoldier(payload) {
@@ -555,6 +584,7 @@ function real() {
     else if (channel === 'soldier') onSoldier(payload);
     else if (channel === 'mesh') onMesh(payload);
     else if (channel === 'ledger') onLedger(payload);
+    else if (channel === 'hoststats') onHostStats(payload);
     else if (channel === 'wake') log('scout', 'info', `wake queued for threat ${payload.threat_id.slice(0, 12)}…`);
     else if (channel === 'error') log(payload.source ?? 'tes', 'warn', payload.message);
   });
