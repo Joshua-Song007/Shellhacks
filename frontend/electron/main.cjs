@@ -39,7 +39,7 @@ app.whenReady().then(() => {
   // Best-effort, real-time only -- a record emitted before a renderer's
   // listener attaches is lost, same as the Rust daemons themselves (no
   // history replay). Fine for non-critical startup lines.
-  for (const channel of ['scout', 'soldier', 'mesh', 'ledger', 'wake', 'error', 'advisor']) {
+  for (const channel of ['scout', 'soldier', 'mesh', 'ledger', 'wake', 'error', 'advisor', 'hoststats']) {
     backend.events.on(channel, (payload) => {
       for (const win of BrowserWindow.getAllWindows()) win.webContents.send('tcell:event', { channel, payload });
     });

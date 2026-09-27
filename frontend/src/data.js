@@ -579,6 +579,13 @@ function onMesh(payload) {
 
 function real() {
   state.devices = state.devices.filter((d) => d.id === state.self); // the other 4 were fictional; only real paired peers join from here
+  // cpu/mem get overwritten within ~1s by the first real hoststats poll, but
+  // lag only updates once a real Stage-1 action is actually scored -- on an
+  // idle system that may never happen, and leaving the fabricated sim default
+  // (0.4) in place would keep showing fake data under the Live badge (AC-7).
+  state.stats.cpu = 0;
+  state.stats.mem = 0;
+  state.stats.lag = 0;
   window.tcell.onEvent(({ channel, payload }) => {
     if (channel === 'scout') onScout(payload);
     else if (channel === 'soldier') onSoldier(payload);

@@ -122,11 +122,50 @@ fn main() -> ExitCode {
     }
 }
 
+/// FR-D-10 extended further: `suspend_all` (pipeline.rs) suspends every live
+/// pid in a convicted lineage, not just the tipping one, and `is_boundary`
+/// (lineage.rs) only recognizes shells-without-`-c/-s` and session hosts as
+/// rollup boundaries -- a plain supervisor binary (e.g. this process's own
+/// caller) is neither, so it can become the lineage root and end up in its
+/// own detection's blast radius. `getppid()` alone only protects the direct
+/// parent; this walks the whole ancestor chain up to launchd/pid 1. Caught
+/// live 2026-09-26: a supervisor two-or-more levels up (with an intervening
+/// non-boundary shell) was suspended this way.
+fn protect_ancestors(policy: &mut SuspendPolicy, start_pid: u32) {
+    let mut pid = start_pid;
+    for _ in 0..64 {
+        // SAFETY: proc_bsdinfo is plain old data; all-zero is a valid value.
+        let mut info: libc::proc_bsdinfo = unsafe { std::mem::zeroed() };
+        let size = std::mem::size_of::<libc::proc_bsdinfo>() as i32;
+        // SAFETY: `info` is a valid, appropriately-sized out-buffer for the call.
+        let ret = unsafe {
+            libc::proc_pidinfo(pid as i32, libc::PROC_PIDTBSDINFO, 0, (&raw mut info).cast(), size)
+        };
+        if ret <= 0 {
+            break;
+        }
+        let ppid = info.pbi_ppid;
+        policy.protect(ppid);
+        if ppid <= 1 {
+            break;
+        }
+        pid = ppid;
+    }
+}
+
 fn run<S: Suspender>(args: &Args, suspender: S) -> io::Result<()> {
     if let Source::Libproc(roots) = &args.source {
         return run_libproc(args, roots, suspender);
     }
     let mut policy = SuspendPolicy::new(std::process::id());
+    // FR-D-10 extended: never suspend whatever launched Scout either -- a
+    // lineage rollup that lands on our own supervisor (e.g. the dashboard
+    // app, if it directly spawned a trigger without an intervening boundary
+    // process) would otherwise SIGSTOP it too. Caught live 2026-09-26: a
+    // real detection suspended the Electron dashboard's own pid alongside
+    // the actual trigger, since lineage.rs has no boundary entry for it.
+    policy.protect(unsafe { libc::getppid() } as u32);
+    protect_ancestors(&mut policy, std::process::id());
     let mut child = None;
     let (reader, tes_lines) = match &args.source {
         Source::Eslogger => {
@@ -195,7 +234,11 @@ fn run_libproc<S: Suspender>(args: &Args, roots: &[PathBuf], suspender: S) -> io
     );
 
     let beacon = args.beacon.map(BeaconCollector::start);
-    let mut pipeline = Pipeline::new(SuspendPolicy::new(std::process::id()), suspender);
+    let mut policy = SuspendPolicy::new(std::process::id());
+    // FR-D-10 extended, see the matching comment in `run` above.
+    policy.protect(unsafe { libc::getppid() } as u32);
+    protect_ancestors(&mut policy, std::process::id());
+    let mut pipeline = Pipeline::new(policy, suspender);
     let mut out = io::stdout().lock();
     let mut last_stats = Instant::now();
     loop {
