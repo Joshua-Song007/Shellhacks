@@ -59,10 +59,12 @@ let segs = [];
 function buildRing() {
   $('#ring-segs').replaceChildren();
   segs = state.devices.map((d, i) => {
-    const gap = 10;
+    // A lone device gets a full ring: gaps (the seams) only mean something between devices.
+    const gap = state.devices.length > 1 ? 5 : 0;
     const len = C / state.devices.length - gap;
     const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
     Object.entries({ cx: 130, cy: 130, r: R, 'stroke-dasharray': `${len} ${C - len}`, 'stroke-dashoffset': -(i * C) / state.devices.length - gap / 2 }).forEach(([k, v]) => c.setAttribute(k, v));
+    if (!gap) c.removeAttribute('stroke-dasharray');
     c.style.stroke = c.style.color = COLOR[d.status];
     $('#ring-segs').append(c);
     const t = document.createElementNS('http://www.w3.org/2000/svg', 'title');
@@ -100,7 +102,7 @@ function renderHealth() {
   $('#f-safe').textContent = `${safe} of ${state.devices.length}`;
   $('#f-stopped').textContent = state.stoppedThisWeek;
   $('#f-cures').textContent = state.genes.filter((g) => !g.suppressed).length;
-  $('#live-text').textContent = phase === 'clean' ? `Protecting ${state.devices.length} devices` : LABEL[phase === 'cured' ? 'cured' : phase];
+  $('#live-text').textContent = phase === 'clean' ? `Protecting ${state.devices.length} device${state.devices.length === 1 ? '' : 's'}` : LABEL[phase === 'cured' ? 'cured' : phase];
   document.body.dataset.alert = phase;
 }
 

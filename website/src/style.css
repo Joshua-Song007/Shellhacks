@@ -144,7 +144,7 @@ button.btn.btn-dark { border: 1px solid transparent; }
   font-family: var(--display); font-weight: 600; letter-spacing: -0.02em;
   font-size: clamp(34px, 4.6vw, 64px); line-height: 1;
 }
-.steps { padding: 18vh var(--gutter) 22vh; max-width: calc(560px + var(--gutter) * 2); }
+.steps { padding: 14vh var(--gutter) 10vh; max-width: calc(560px + var(--gutter) * 2); }
 .step-list { list-style: none; margin-top: 56px; position: relative; padding-left: 28px; }
 .step-list::before, .step-list::after { content: ''; position: absolute; left: 0; top: 6px; bottom: 6px; width: 2px; }
 .step-list::before { background: var(--faint); }
@@ -160,7 +160,7 @@ button.btn.btn-dark { border: 1px solid transparent; }
 .step:nth-child(4) h3 { color: var(--c); }
 
 /* ---------- Chain ---------- */
-.chain { padding: 16vh var(--gutter) 12vh; }
+.chain { padding: 10vh var(--gutter) 8vh; }
 .chain-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 20px; }
 .chain-sub { margin-top: 16px; max-width: 50ch; color: #c3cfd8; }
 .source {
@@ -214,7 +214,7 @@ button.btn.btn-dark { border: 1px solid transparent; }
 /* Copy sits left; the mesh the chain turned into fills the canvas on the right. */
 .enterprise {
   min-height: 100svh; display: flex; flex-direction: column; justify-content: center; align-items: flex-start;
-  padding: 18vh var(--gutter) 8vh; max-width: calc(660px + var(--gutter) * 2);
+  padding: 10vh var(--gutter) 8vh; max-width: calc(660px + var(--gutter) * 2);
 }
 /* The map turns behind the copy; one fixed fade (not one per section) keeps text readable with no seam between sections. */
 #fade {
@@ -232,7 +232,7 @@ button.btn.btn-dark { border: 1px solid transparent; }
 .ent-points p { margin-top: 3px; color: var(--muted); font-size: 15px; max-width: 42ch; }
 
 /* ---------- CTA ---------- */
-.cta { padding: 24vh var(--gutter) 40px; display: grid; justify-items: start; gap: 22px; }
+.cta { padding: 14vh var(--gutter) 40px; display: grid; justify-items: start; gap: 22px; }
 .cta-title {
   font: 500 clamp(30px, 4.6vw, 76px)/1.02 var(--display); letter-spacing: -0.02em;
   max-width: 14ch;
