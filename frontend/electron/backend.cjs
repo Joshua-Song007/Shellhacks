@@ -270,6 +270,40 @@ function runOnce(cmd, args) {
   });
 }
 
+// Human-in-the-loop (Scout watch list): pause/resume a watched lineage's
+// known pids. Only the pids Scout credited an action to are known (progress
+// records carry the actor, not full ancestry). Before signalling, each pid's
+// live exe must still match the one Scout saw -- a recycled pid is skipped,
+// never signalled. Own-uid processes are signalled directly; root daemons
+// (eslogger mode) fall back to `sudo -n kill`, same best-effort as Scout.
+const SYSTEM_PID_FLOOR = 100; // matches scoring.rs's floor
+function signalPids(targets, sig, protectedPids) {
+  if (sig !== 'SIGSTOP' && sig !== 'SIGCONT') return Promise.reject(new Error(`unsupported signal ${sig}`));
+  const liveExe = (pid) => new Promise((r) => execFile('ps', ['-p', String(pid), '-o', 'comm='], (err, out) => r(err ? null : out.trim())));
+  const sudoKill = (pid) => new Promise((r) => execFile('/usr/bin/sudo', ['-n', '/bin/kill', `-${sig.slice(3)}`, String(pid)], (err) => r(!err)));
+  return Promise.all(
+    targets.map(async ({ pid, exe }) => {
+      if (!Number.isInteger(pid) || pid < SYSTEM_PID_FLOOR || protectedPids.includes(pid)) return { pid, ok: false, reason: 'protected process' };
+      const now = await liveExe(pid);
+      if (!now) return { pid, ok: false, reason: 'already exited' };
+      if (now !== exe) return { pid, ok: false, reason: 'pid now belongs to a different program' };
+      try {
+        process.kill(pid, sig);
+        return { pid, ok: true };
+      } catch (e) {
+        if (e.code === 'EPERM' && (await sudoKill(pid))) return { pid, ok: true };
+        return { pid, ok: false, reason: e.code === 'EPERM' ? 'not permitted (owned by another user; needs cached sudo)' : e.message };
+      }
+    }),
+  );
+}
+
+// scoring.rs threat_id(): SHA-256 over the ordered action codes.
+const ACTION_CODE = { ExecFromTempOrCache: 1, RecoverySnapshotTamper: 2, RapidFileModBurst: 3 };
+function threatIdHex(schema) {
+  return crypto.createHash('sha256').update(Buffer.from(schema.map((a) => ACTION_CODE[a]))).digest('hex');
+}
+
 function scoutArgs(cfg) {
   const base = cfg.scoutMode === 'eslogger' ? ['--eslogger'] : ['--libproc'];
   return [...base, '--wake-socket', cfg.wakeSocketPath];
@@ -308,14 +342,16 @@ class WakeRelay {
     this.server = net.createServer((socket) => {
       readline.createInterface({ input: socket }).on('line', (line) => {
         const wake = tryParseJson(line);
-        if (wake && typeof wake.threat_id === 'string') {
-          this.queue.push(wake);
-          this.events.emit('wake', wake);
-          this._drain();
-        }
+        if (wake && typeof wake.threat_id === 'string') this.enqueue(wake);
       });
     });
     this.server.listen(this.cfg.wakeSocketPath);
+  }
+
+  enqueue(wake) {
+    this.queue.push(wake);
+    this.events.emit('wake', wake);
+    this._drain();
   }
 
   stop() {
@@ -499,6 +535,18 @@ function startBackend(overrides = {}) {
       // just itself + its own children.
       const sh = spawn('sh', [], { stdio: ['pipe', 'ignore', 'ignore'] });
       sh.stdin.end(`${cfg.testThreatScript}\n`);
+    },
+    signalLineage(targets, sig) {
+      const own = [process.pid, process.ppid, scout.child?.pid, meshd.child?.pid, feed.child?.pid].filter(Boolean);
+      return signalPids(targets, sig, own);
+    },
+    // A person's escalation stands in for Scout's 100-pt conviction: the same
+    // WakeSignal shape goes through the same relay to a fresh Soldier.
+    escalate(schema, pid) {
+      if (!Array.isArray(schema) || !schema.length || !schema.every((a) => a in ACTION_CODE)) throw new Error('bad schema');
+      const wake = { threat_id: threatIdHex(schema), pid, schema };
+      relay.enqueue(wake);
+      return wake.threat_id;
     },
     suppressGene(threatIdHex) {
       const args = [threatIdHex, ...(cfg.rpcUrl ? [cfg.rpcUrl] : [])];

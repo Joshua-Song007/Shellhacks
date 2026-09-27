@@ -503,7 +503,7 @@ function scheduleWatchingRevert(id) {
 function liveIncidentFor(rootExe) {
   let inc = liveIncidents.get(rootExe);
   if (!inc) {
-    inc = { device: state.self, threat: null, actions: [], threatId: null, t0: Date.now(), lastSeen: Date.now(), marks: {}, score: 0, tree: { parent: null, child: null, acts: [] }, search: null, gene: null, done: false };
+    inc = { key: rootExe, device: state.self, threat: null, actions: [], threatId: null, t0: Date.now(), lastSeen: Date.now(), marks: {}, score: 0, tree: { parent: null, child: null, acts: [] }, search: null, gene: null, done: false };
     liveIncidents.set(rootExe, inc);
   }
   // Scout watches the WHOLE system, not just the deliberate test lineage --
@@ -526,15 +526,84 @@ function liveIncidentFor(rootExe) {
 // the single Threat response panel above (state.incident only ever shows
 // ONE incident at a time, per the conflation fix above -- background noise
 // like corespotlightd/BiomeAgent no longer has to hijack it to be seen at
-// all). Same freshness window as scheduleWatchingRevert, so a lineage drops
-// off this list at exactly the moment the status pill itself reverts to
-// 'clean'. Sim mode has no liveIncidents, so this is always empty there.
+// all). Uses a longer window than scheduleWatchingRevert (see below), so a
+// lineage stays listed after the status pill itself reverts to 'clean'.
+// Sim mode has no liveIncidents, so this is always empty there.
+// Human-in-the-loop: the list keeps a lineage for WATCH_LIST_MS (not the
+// pill's 5s) so a person has time to look and decide. A paused lineage never
+// drops off -- even after a cure is requested -- since this list is the only
+// place to resume it.
+const WATCH_LIST_MS = 60_000;
 export function watchingLineages() {
   const now = Date.now();
   return [...liveIncidents.values()]
-    .filter((inc) => !inc.marks.detect && now - inc.lastSeen < WATCHING_REVERT_MS)
+    .filter((inc) => inc.paused || (!inc.marks.detect && !inc.dismissed && now - inc.lastSeen < WATCH_LIST_MS))
     .sort((a, b) => b.lastSeen - a.lastSeen)
-    .map((inc) => ({ exe: inc.tree.child?.exe ?? 'unknown', score: inc.score, threat: inc.threat }));
+    .map((inc) => ({ key: inc.key, exe: inc.tree.child?.exe ?? 'unknown', score: inc.score, threat: inc.threat, acts: inc.tree.acts, pids: lineageTargets(inc).map((t) => t.pid), lastSeen: inc.lastSeen, paused: !!inc.paused, escalated: !!inc.escalated }));
+}
+
+// Only the pids Scout credited an action to are known (no full ancestry).
+function lineageTargets(inc) {
+  const seen = new Map();
+  for (const a of inc.tree.acts) if (a.tes?.proc?.pid) seen.set(a.tes.proc.pid, { pid: a.tes.proc.pid, exe: a.tes.proc.exe });
+  return [...seen.values()];
+}
+
+async function signalLineage(inc, sig) {
+  const results = await window.tcell.signalLineage(lineageTargets(inc), sig);
+  for (const r of results.filter((r) => !r.ok)) log('scout', 'warn', `${sig} pid ${r.pid}: ${r.reason}`);
+  return results;
+}
+
+// Returns the per-pid results so the caller can show why a pid was skipped.
+export async function pauseLineage(key) {
+  const inc = liveIncidents.get(key);
+  if (!inc || inc.paused) return [];
+  const results = await signalLineage(inc, 'SIGSTOP');
+  inc.pausedPids = results.filter((r) => r.ok).map((r) => r.pid);
+  if (inc.pausedPids.length) {
+    inc.paused = true;
+    setStatus(state.self, 'isolated');
+    emit('incident', { device: state.self, phase: 'isolated', threat: inc.threat });
+    log('scout', 'alert', `paused by you: ${inc.key} (pid ${inc.pausedPids.join(', ')})`);
+  }
+  emit('threat', state.incident);
+  return results;
+}
+
+export async function resumeLineage(key) {
+  const inc = liveIncidents.get(key);
+  if (!inc?.paused) return [];
+  const results = await window.tcell.signalLineage(lineageTargets(inc).filter((t) => inc.pausedPids.includes(t.pid)), 'SIGCONT');
+  inc.paused = false;
+  inc.dismissed = !inc.escalated; // resumed = judged fine; don't keep nagging
+  log('scout', 'info', `resumed by you: ${inc.key}`);
+  if (![...liveIncidents.values()].some((i) => i.paused)) {
+    setStatus(state.self, 'watching');
+    scheduleWatchingRevert(state.self);
+  }
+  emit('threat', state.incident);
+  return results;
+}
+
+// Stands in for Scout's 100-pt conviction: same WakeSignal through the same
+// relay, so the rest (Soldier evolve/inherit, ledger, panel) is the normal path.
+export async function escalateLineage(key) {
+  const inc = liveIncidents.get(key);
+  if (!inc?.paused || inc.escalated) return;
+  inc.threatId = await window.tcell.escalate(inc.actions, inc.pausedPids[0]);
+  inc.escalated = true;
+  inc.marks.detect = Date.now();
+  state.incident = inc; // the person asked for this one, so it takes the panel
+  log('scout', 'alert', `escalated by you: ${inc.key}; wake {Threat_ID=${inc.threatId.slice(0, 16)}…, schema=${inc.actions.length}}`);
+  emit('threat', inc);
+}
+
+export function dismissLineage(key) {
+  const inc = liveIncidents.get(key);
+  if (!inc || inc.paused) return;
+  inc.dismissed = true;
+  emit('threat', state.incident);
 }
 
 function onScout(payload) {
@@ -552,6 +621,7 @@ function onScout(payload) {
     }
     inc.score = p.score;
     inc.lastSeen = Date.now();
+    inc.dismissed = false; // new behaviour since "Looks fine" -- worth another look
     inc.actions = [...inc.actions, p.action];
     inc.tree.acts.push({ action: p.action, weight: WEIGHT[p.action], attack: p.attack_id, tes: p.event });
     inc.threat = schemaLabel(inc.actions);

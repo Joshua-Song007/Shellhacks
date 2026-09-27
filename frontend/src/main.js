@@ -1,5 +1,5 @@
 import gsap from 'gsap';
-import { feed, state, inject, clearIncident, suppress, ALLELES, ACT_LABEL, ATTACK, THREATS, evaluate, startPairing, cancelPairing, revoke, joinByUri, getReview, watchingLineages } from './data.js';
+import { feed, state, inject, clearIncident, suppress, ALLELES, ACT_LABEL, ATTACK, THREATS, evaluate, startPairing, cancelPairing, revoke, joinByUri, getReview, watchingLineages, pauseLineage, resumeLineage, escalateLineage, dismissLineage } from './data.js';
 import QRCode from 'qrcode';
 import { createHelix } from './helix.js';
 import { createMesh, LABEL, GLYPH } from './mesh.js';
@@ -612,12 +612,64 @@ addEventListener('keydown', (e) => e.key === 'Escape' && closeInspect());
 // display it -- see data.js's liveIncidentFor/scheduleWatchingRevert notes).
 // Membership is time-based (a lineage drops off once it's gone quiet), so
 // this needs its own periodic re-render, not just an event-driven one.
+// Human-in-the-loop: each row expands to what Scout actually saw, and lets
+// the person Pause (SIGSTOP) -> Build a cure (real wake to Soldier) or
+// Resume / Looks fine. Re-rendered only when the rows change, so an open row
+// and a focused button survive the 2s membership tick.
+const watchOpen = new Set();
+const watchNote = new Map(); // key -> last pause/resume outcome, shown in the row
+let watchSig = '';
+function watchRow(r) {
+  const tag = r.escalated ? '<em class="w-tag w-cure">Cure requested</em>' : r.paused ? '<em class="w-tag w-paused">Paused</em>' : '';
+  const acts = r.acts.map((a) => `<li><span>${esc(ACT_LABEL[a.action] ?? a.action)}</span><b>+${a.weight}</b><code>${esc(a.attack)}</code><details><summary>Raw event</summary><pre>${esc(JSON.stringify(a.tes, null, 2))}</pre></details></li>`).join('');
+  const cureHint = r.escalated ? 'Soldier is on it; follow along in Threat response.' : r.paused ? 'Build a cure sends this to Soldier as if Scout had convicted it, and publishes the cure to the network.' : 'Pause it first. Frozen processes can be resumed.';
+  return `<li data-key="${esc(r.key)}"><details${watchOpen.has(r.key) ? ' open' : ''}>
+    <summary><span class="w-name">${esc(base(r.exe))}</span>${tag}<i class="w-bar" style="--s:${Math.min(r.score, 100)}%"></i><b>${r.score}/100</b></summary>
+    <div class="w-body">
+      <p class="w-path">${esc(r.exe)} <span>pid ${r.pids.join(', ') || 'unknown'}, last activity <time data-t="${r.lastSeen}">${ago(r.lastSeen)}</time></span></p>
+      <ul class="w-acts">${acts}</ul>
+      <div class="w-do">
+        ${r.paused ? '<button class="btn btn-sm btn-line" data-w="resume">Resume</button>' : '<button class="btn btn-sm btn-line" data-w="pause">Pause</button>'}
+        <button class="btn btn-sm" data-w="cure"${r.paused && !r.escalated ? '' : ' disabled'}>Build a cure</button>
+        ${r.paused ? '' : '<button class="btn-quiet" data-w="dismiss">Looks fine</button>'}
+      </div>
+      <p class="w-note">${esc(watchNote.get(r.key) ?? cureHint)}</p>
+    </div></details></li>`;
+}
 function renderWatchlist() {
   const list = $('#watchlist');
   if (!list) return;
   const rows = watchingLineages();
-  list.innerHTML = rows.length ? rows.map((r) => `<li><span>${esc(base(r.exe))}</span><b>${r.score}/100</b></li>`).join('') : '<li class="empty">Nothing partially scoring right now.</li>';
+  const sig = JSON.stringify(rows.map((r) => [r.key, r.score, r.acts.length, r.paused, r.escalated, watchNote.get(r.key)]));
+  if (sig === watchSig) return;
+  watchSig = sig;
+  list.innerHTML = rows.length ? rows.map(watchRow).join('') : '<li class="empty">Nothing partially scoring right now.</li>';
 }
+$('#watchlist')?.addEventListener('toggle', (e) => {
+  const key = e.target.closest('li[data-key]')?.dataset.key;
+  if (!key || e.target.parentElement.dataset.key !== key) return; // ignore the nested "Raw event" toggles
+  e.target.open ? watchOpen.add(key) : watchOpen.delete(key);
+}, true);
+$('#watchlist')?.addEventListener('click', async (e) => {
+  const btn = e.target.closest('[data-w]');
+  if (!btn) return;
+  const key = btn.closest('li[data-key]').dataset.key;
+  btn.disabled = true;
+  const act = btn.dataset.w;
+  try {
+    if (act === 'dismiss') return dismissLineage(key);
+    if (act === 'cure') return await escalateLineage(key);
+    const results = await (act === 'pause' ? pauseLineage(key) : resumeLineage(key));
+    const bad = results.filter((r) => !r.ok);
+    if (bad.length) watchNote.set(key, `${act === 'pause' ? "Couldn't pause" : "Couldn't resume"} ${bad.map((r) => `pid ${r.pid} (${r.reason})`).join(', ')}.`);
+    else watchNote.delete(key);
+  } catch (err) {
+    watchNote.set(key, `That didn't go through: ${err.message}`);
+  } finally {
+    watchSig = '';
+    renderWatchlist();
+  }
+});
 
 // ---------- Wiring ----------
 feed.addEventListener('devices', () => {
