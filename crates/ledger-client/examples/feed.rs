@@ -12,7 +12,7 @@
 //! can already hold a large backlog of past signatures/genomes that aren't
 //! new activity.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
 use ledger_client::LedgerClient;
@@ -49,6 +49,7 @@ fn main() {
 
     let mut last_seen_signature: Option<String> = None;
     let mut seen_genomes: HashMap<[u8; 32], ([u8; 32], bool)> = HashMap::new();
+    let mut last_stats: Option<(usize, usize)> = None;
     let mut first_tick = true;
 
     loop {
@@ -76,7 +77,7 @@ fn main() {
             Err(e) => emit(serde_json::json!({"type": "error", "source": "recent_signatures", "message": e.to_string()})),
         }
 
-        match client.all_genomes() {
+        let genomes = match client.all_genomes() {
             Ok(genomes) => {
                 let changes = genome_diff(&genomes, &mut seen_genomes);
                 // Genomes are emitted on the first tick too: they're the chain's
@@ -91,8 +92,27 @@ fn main() {
                         "epigenetic_status": g.epigenetic_status,
                     }));
                 }
+                Some(genomes)
             }
-            Err(e) => emit(serde_json::json!({"type": "error", "source": "all_genomes", "message": e.to_string()})),
+            Err(e) => {
+                emit(serde_json::json!({"type": "error", "source": "all_genomes", "message": e.to_string()}));
+                None
+            }
+        };
+
+        // Network-wide totals for the Global genome window, emitted on change
+        // (first tick included) -- a diff-only feed can't total these itself.
+        if let Some(genomes) = genomes {
+            match client.all_threats() {
+                Ok(threats) => {
+                    let stats = network_stats(&genomes, &threats);
+                    if last_stats != Some(stats) {
+                        emit(serde_json::json!({"type": "network_stats", "cures": stats.0, "devices": stats.1}));
+                        last_stats = Some(stats);
+                    }
+                }
+                Err(e) => emit(serde_json::json!({"type": "error", "source": "all_threats", "message": e.to_string()})),
+            }
         }
 
         first_tick = false;
@@ -153,6 +173,18 @@ fn genome_diff(current: &[t_cell::GenomeRegistry], seen: &mut HashMap<[u8; 32], 
     changes
 }
 
+/// Pure: (cures committed, devices immunized). A cure counts once its upload
+/// is finalized (gene_hash set), suppressed or not -- it was committed. A
+/// device is a distinct `submit_threat` reporter (the Soldier's payer key)
+/// on a threat that has a committed cure: every wake reports before it
+/// evolves or inherits, so each reporter ran that cure. Mesh-only receivers
+/// (meshd Accept) never report, so they're not counted.
+fn network_stats(genomes: &[t_cell::GenomeRegistry], threats: &[t_cell::ThreatRegistry]) -> (usize, usize) {
+    let cured: HashSet<[u8; 32]> = genomes.iter().filter(|g| g.gene_hash != [0; 32]).map(|g| g.threat_id).collect();
+    let devices: HashSet<_> = threats.iter().filter(|t| cured.contains(&t.threat_id)).flat_map(|t| t.reporters.iter()).collect();
+    (cured.len(), devices.len())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -194,6 +226,17 @@ mod tests {
         let fresh = vec![sig("c", 3), sig("b", 2)];
         let out = new_signatures(&fresh, Some("long-since-scrolled-off"));
         assert_eq!(out.len(), 2);
+    }
+
+    #[test]
+    fn network_stats_counts_finalized_cures_and_their_distinct_reporters() {
+        use anchor_lang::prelude::Pubkey;
+        let (a, b) = (Pubkey::new_unique(), Pubkey::new_unique());
+        let threat = |id: u8, reporters: Vec<Pubkey>| t_cell::ThreatRegistry { threat_id: [id; 32], confidence_score: reporters.len() as u32, behavioral_schema_hash: [0; 32], reporters };
+        let genomes = vec![genome(1, 10, 5, false), genome(2, 20, 5, true), genome(3, 0, 5, false)];
+        // threat 3 is unfinalized, threat 4 has no genome: neither's reporters count
+        let threats = vec![threat(1, vec![a, b]), threat(2, vec![a]), threat(3, vec![Pubkey::new_unique()]), threat(4, vec![Pubkey::new_unique()])];
+        assert_eq!(network_stats(&genomes, &threats), (2, 2));
     }
 
     fn genome(threat_id: u8, gene_hash: u8, bytes: usize, suppressed: bool) -> t_cell::GenomeRegistry {

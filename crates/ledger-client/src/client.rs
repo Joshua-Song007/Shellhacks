@@ -228,6 +228,16 @@ impl LedgerClient {
             .collect())
     }
 
+    /// Every Threat Registry account this program owns; same mixed-account
+    /// filter as `all_genomes`, from the other side.
+    pub fn all_threats(&self) -> Result<Vec<t_cell::ThreatRegistry>, LedgerError> {
+        let accounts = self.rpc.get_program_accounts(&self.program_id).map_err(LedgerError::Rpc)?;
+        Ok(accounts
+            .into_iter()
+            .filter_map(|(_, account)| t_cell::ThreatRegistry::try_deserialize(&mut account.data.as_slice()).ok())
+            .collect())
+    }
+
     fn fetch<T: AccountDeserialize>(&self, pda: Pubkey) -> Result<Option<T>, LedgerError> {
         match self.rpc.get_account_data(&pda) {
             Ok(data) => T::try_deserialize(&mut data.as_slice()).map(Some).map_err(LedgerError::Deserialize),

@@ -815,6 +815,13 @@ function onLedger(payload) {
     }
     return;
   }
+  if (payload.type === 'network_stats') {
+    // Real network-wide totals from chain accounts (feed.rs network_stats).
+    state.stats.globalGenes = payload.cures;
+    state.stats.globalDevices = payload.devices;
+    emit('stats', state.stats);
+    return;
+  }
   if (payload.type === 'error') log('ledger', 'warn', payload.message);
 }
 
@@ -873,6 +880,8 @@ function real() {
   state.stats.mem = 0;
   state.stats.lag = 0;
   state.stats.source = '—'; // filled from Scout's first real stats record, not the sim's default
+  state.stats.globalGenes = 0; // seedHistory()'s fake totals; the ledger feed's first network_stats record fills the real ones
+  state.stats.globalDevices = 0;
   window.tcell.onEvent(({ channel, payload }) => {
     if (channel === 'scout') onScout(payload);
     else if (channel === 'soldier') onSoldier(payload);

@@ -237,6 +237,7 @@ function renderStats() {
   $('#gs-slot').textContent = fmt(state.stats.slot);
 }
 
+feed.addEventListener('stats', renderStats);
 feed.addEventListener('block', ({ detail: b }) => {
   renderStats();
   if (b.kind !== 'commit_gene' || genes.some((g) => g.gene === b.gene)) return;
