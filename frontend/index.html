@@ -48,6 +48,23 @@
             <div><dd id="f-cures">14</dd><dt>Cures known</dt></div>
           </dl>
         </div>
+        <div class="advisor">
+          <button class="advisor-avatar" id="advisor-btn" popovertarget="review" aria-label="Open your weekly review">
+            <canvas id="advisor-gl"></canvas>
+            <span class="advisor-dot" id="advisor-dot" hidden></span>
+          </button>
+          <p class="advisor-say" id="advisor-say" aria-live="polite">Reading your week…</p>
+          <div class="review" id="review" popover aria-labelledby="review-head">
+            <section class="review-note" id="review-note" hidden>
+              <h3>About the threat just now</h3>
+              <p id="review-note-text"></p>
+            </section>
+            <h3 class="review-kicker">Your week</h3>
+            <h2 id="review-head"></h2>
+            <ul class="review-tips" id="review-tips"></ul>
+            <footer><span id="review-when"></span><button class="btn-quiet" id="review-again">Review again</button></footer>
+          </div>
+        </div>
       </section>
 
       <section class="panel mesh" aria-labelledby="mesh-title">

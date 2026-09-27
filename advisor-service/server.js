@@ -24,9 +24,21 @@ function authenticate(headers, raw, allowed, now = Date.now()) {
   if (!/^[0-9a-f]{128}$/i.test(sig) || !crypto.verify(null, raw, key, Buffer.from(sig, 'hex'))) throw new Error('bad signature');
   const body = JSON.parse(raw);
   if (!(Math.abs(now - body.sent_ms) <= MAX_SKEW_MS)) throw new Error('stale request');
-  const i = body.incident || {};
-  if (!HEX64.test(i.threat_id) || !Array.isArray(i.actions) || !Array.isArray(i.attack_ids)) throw new Error('bad incident');
   return { pubkey, body };
+}
+
+function validIncident(i) {
+  return !!i && HEX64.test(i.threat_id) && Array.isArray(i.actions) && Array.isArray(i.attack_ids);
+}
+
+// Gemma is asked for JSON but is free text; take the first {...} and keep only
+// the expected shape, else fall back to the whole reply as the headline.
+function parseReview(text) {
+  try {
+    const o = JSON.parse(text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1));
+    if (typeof o.headline === 'string') return { headline: o.headline, tips: (Array.isArray(o.tips) ? o.tips : []).filter((t) => typeof t === 'string').slice(0, 3) };
+  } catch {}
+  return { headline: text.trim(), tips: [] };
 }
 
 function readBody(req) {
@@ -45,20 +57,16 @@ function readBody(req) {
   });
 }
 
-async function narrate(incident, trend) {
+async function chat(system, user, maxTokens) {
   const res = await fetch(process.env.INFERENCE_URL || 'https://inference.do-ai.run/v1/chat/completions', {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: `Bearer ${process.env.MODEL_KEY}` },
     body: JSON.stringify({
       model: process.env.MODEL || 'gemma-4-31B-it',
-      max_tokens: 300,
+      max_tokens: maxTokens,
       messages: [
-        {
-          role: 'system',
-          content:
-            'You are the T-cell endpoint-defense advisor. In 2-3 plain sentences for a non-technical user, explain what was stopped (from the actions and ATT&CK ids) and whether the device trend looks better or worse. Use only the data given; do not invent details.',
-        },
-        { role: 'user', content: JSON.stringify({ incident, trend_last_7_days: trend }) },
+        { role: 'system', content: system },
+        { role: 'user', content: JSON.stringify(user) },
       ],
     }),
     signal: AbortSignal.timeout(20000),
@@ -66,6 +74,20 @@ async function narrate(incident, trend) {
   if (!res.ok) throw new Error(`model ${res.status}`);
   return (await res.json()).choices[0].message.content;
 }
+
+const narrate = (incident, trend) =>
+  chat(
+    'You are the T-cell endpoint-defense advisor. In 2-3 plain sentences for a non-technical user, explain what was stopped (from the actions and ATT&CK ids) and whether the device trend looks better or worse. Use only the data given; do not invent details.',
+    { incident, trend_last_7_days: trend },
+    300,
+  );
+
+const REVIEW_PROMPT =
+  'You are the T-cell endpoint-defense advisor giving a weekly review to a non-technical user. From the week summary (Stage-1 actions stopped, ATT&CK ids, daily trend, and last week\'s count for comparison), spot tendencies that put the user at risk and give practical habits to lower it. ' +
+  'ExecFromTempOrCache = a program ran from a temp/cache/download folder (often an opened attachment or download); RecoverySnapshotTamper = something tried to delete backups; RapidFileModBurst = mass file changes, typical of ransomware. ' +
+  'Reply with JSON only: {"headline": "<one short sentence, max 12 words>", "tips": ["<up to 3 short, specific habits, max 20 words each>"]}. Use only the data given; do not invent details.';
+
+const QUIET_REVIEW = { headline: 'A quiet week. Nothing tried to get in.', tips: ['Keep installing updates when your computer asks.'] };
 
 function start() {
   const { Pool } = require('pg');
@@ -91,6 +113,7 @@ function start() {
     }
     const { pubkey, body } = auth;
     const i = body.incident;
+    if (!validIncident(i)) return send(res, 400, { error: 'bad incident' });
     const tsNs = BigInt(i.ts_ns);
 
     await s3.send(
@@ -122,11 +145,55 @@ function start() {
     send(res, 200, { narration, trend });
   }
 
+  // Weekly review: this device's own last 7 days, aggregated here (derived
+  // incident rows only, never raw) -> Gemma. The device caches it for a week.
+  async function handleReview(req, res) {
+    let auth;
+    try {
+      auth = authenticate(req.headers, await readBody(req), allowed);
+    } catch (e) {
+      return send(res, 401, { error: e.message });
+    }
+    const { pubkey } = auth;
+    const week = `device_pubkey = $1 AND ts >= now() - interval '7 days'`;
+    const [{ rows: [counts] }, { rows: actions }, { rows: attackIds }, { rows: trend }] = await Promise.all([
+      db.query(
+        `SELECT count(*) FILTER (WHERE ts >= now() - interval '7 days')::int AS incidents,
+                count(*) FILTER (WHERE ts < now() - interval '7 days')::int AS incidents_prior_week,
+                max(score) FILTER (WHERE ts >= now() - interval '7 days') AS max_score
+         FROM incidents WHERE device_pubkey = $1 AND ts >= now() - interval '14 days'`,
+        [pubkey],
+      ),
+      db.query(`SELECT a AS action, count(*)::int AS n FROM incidents, unnest(actions) a WHERE ${week} GROUP BY a ORDER BY n DESC`, [pubkey]),
+      db.query(`SELECT a AS attack_id, count(*)::int AS n FROM incidents, unnest(attack_ids) a WHERE ${week} GROUP BY a ORDER BY n DESC`, [pubkey]),
+      db.query(`SELECT day, incidents, max_score, avg_score FROM device_risk_daily WHERE ${week.replace('ts', 'day')} ORDER BY day`, [pubkey]),
+    ]);
+    const summary = { ...counts, actions, attack_ids: attackIds, trend };
+
+    // ponytail: a zero-incident week skips the model call (nothing to find a trend in).
+    let review = QUIET_REVIEW;
+    if (counts.incidents) {
+      try {
+        review = parseReview(await chat(REVIEW_PROMPT, summary, 400));
+      } catch (e) {
+        console.error('review failed:', e.message);
+        review = null;
+      }
+    }
+    send(res, 200, { summary, review });
+  }
+
   http
     .createServer((req, res) => {
       if (req.method === 'GET' && req.url === '/healthz') return send(res, 200, { ok: true });
       if (req.method === 'POST' && req.url === '/v1/incident') {
         return handleIncident(req, res).catch((e) => {
+          console.error(e);
+          send(res, 500, { error: 'internal' });
+        });
+      }
+      if (req.method === 'POST' && req.url === '/v1/review') {
+        return handleReview(req, res).catch((e) => {
           console.error(e);
           send(res, 500, { error: 'internal' });
         });
@@ -142,4 +209,4 @@ function send(res, status, obj) {
 }
 
 if (require.main === module) start();
-module.exports = { authenticate };
+module.exports = { authenticate, parseReview, validIncident };

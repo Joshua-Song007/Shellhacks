@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const crypto = require('node:crypto');
-const { authenticate } = require('./server.js');
+const { authenticate, parseReview, validIncident } = require('./server.js');
 
 const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
 const pubHex = publicKey.export({ format: 'der', type: 'spki' }).subarray(12).toString('hex');
@@ -37,4 +37,16 @@ test('rejects an unknown device', () => {
 test('rejects a stale request', () => {
   const { raw, headers } = signed({ sent_ms: Date.now() - 10 * 60 * 1000, incident });
   assert.throws(() => authenticate(headers, raw, allowed), /stale/);
+});
+
+test('rejects a malformed incident', () => {
+  assert.strictEqual(validIncident(incident), true);
+  assert.strictEqual(validIncident({ ...incident, threat_id: 'zz' }), false);
+  assert.strictEqual(validIncident(undefined), false);
+});
+
+test('parses a JSON review wrapped in prose, falls back to plain text', () => {
+  const r = parseReview('Sure!\n```json\n{"headline":"Watch downloads","tips":["a","b","c","d",5]}\n```');
+  assert.deepStrictEqual(r, { headline: 'Watch downloads', tips: ['a', 'b', 'c'] });
+  assert.deepStrictEqual(parseReview('  just text '), { headline: 'just text', tips: [] });
 });

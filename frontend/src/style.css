@@ -86,7 +86,7 @@ body[data-alert='cured'] .live-dot { background: var(--t); box-shadow: 0 0 10px 
 
 /* Health: the one loud element */
 .health {
-  display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 30px; padding: 26px 32px;
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 30px; padding: 26px 32px;
   background: radial-gradient(120% 90% at 18% 50%, color-mix(in srgb, var(--s) 13%, transparent), transparent 60%), var(--panel);
   transition: background 0.8s;
 }
@@ -189,6 +189,7 @@ body[data-alert='cured'] .live-dot { background: var(--t); box-shadow: 0 0 10px 
 .src-soldier b { color: var(--c); }
 .src-ledger b { color: var(--g); }
 .src-mesh b { color: var(--t); }
+.src-advisor b { color: #f2c84b; }
 .lv-warn span { color: var(--amber); }
 .lv-alert span { color: var(--threat); }
 .lv-ok span { color: var(--a); }
@@ -196,7 +197,8 @@ body[data-alert='cured'] .live-dot { background: var(--t); box-shadow: 0 0 10px 
 .term-body[data-hide~='scout'] .src-scout,
 .term-body[data-hide~='soldier'] .src-soldier,
 .term-body[data-hide~='ledger'] .src-ledger,
-.term-body[data-hide~='mesh'] .src-mesh { display: none; }
+.term-body[data-hide~='mesh'] .src-mesh,
+.term-body[data-hide~='advisor'] .src-advisor { display: none; }
 
 .gauges { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .gauges figure { background: var(--raise); border-radius: 10px; padding: 10px 12px 8px; }
@@ -368,6 +370,35 @@ body[data-alert='cured'] .live-dot { background: var(--t); box-shadow: 0 0 10px 
 #mesh .node.pickable:hover .disc, #mesh .node.pickable:focus-visible .disc { fill: color-mix(in srgb, var(--s) 14%, var(--raise)); }
 #mesh .node.pickable:focus-visible { outline: none; }
 #mesh .node.pickable:focus-visible .halo { opacity: 1; }
+
+/* Advisor: the d20 companion in the health hero; its voice colour is its own gold, apart from the teal system UI */
+.advisor { --voice: #f2c84b; anchor-name: --advisor; width: clamp(160px, 16vw, 230px); display: grid; justify-items: center; gap: 4px; align-self: center; }
+.advisor-avatar { position: relative; width: 100%; aspect-ratio: 1; padding: 0; border: 0; border-radius: 50%; background: none; cursor: grab; }
+.advisor-avatar:active { cursor: grabbing; }
+.advisor-avatar canvas { transition: transform 0.3s cubic-bezier(0.3, 1.6, 0.5, 1), filter 0.4s; }
+.advisor-avatar:hover canvas { transform: translateY(-4px) scale(1.03); }
+body[data-alert='watching'] .advisor-avatar canvas, body[data-alert='isolated'] .advisor-avatar canvas { filter: saturate(0.7) brightness(0.8); }
+.advisor-avatar:focus-visible { outline: 2px solid var(--voice); outline-offset: -8px; }
+.advisor-avatar canvas { display: block; width: 100%; height: 100%; touch-action: none; filter: drop-shadow(0 0 22px rgb(242 200 75 / 0.22)); }
+.advisor-dot { position: absolute; top: 16%; right: 20%; width: 10px; height: 10px; border-radius: 50%; background: var(--voice); box-shadow: 0 0 0 3px var(--panel), 0 0 12px var(--voice); }
+.advisor-say { max-width: 26ch; min-height: 2.8em; color: var(--muted); font-size: 13px; line-height: 1.4; text-align: center; text-wrap: balance; }
+.review {
+  position-anchor: --advisor; position-area: bottom span-left; position-try-fallbacks: flip-block, left center;
+  width: min(360px, calc(100vw - 32px)); margin: 10px 0; padding: 20px 22px 14px;
+  background: var(--raise); color: var(--bone); border: 1px solid rgb(242 200 75 / 0.3); border-radius: 18px;
+  box-shadow: 0 24px 60px rgb(0 0 0 / 0.55);
+}
+.review::backdrop { background: transparent; }
+.review h3 { color: #f2c84b; font: 500 12.5px/1.3 var(--body); }
+.review h2 { font: 500 19px/1.3 var(--display); letter-spacing: -0.005em; margin-top: 6px; text-wrap: balance; }
+.review-note { padding-bottom: 14px; margin-bottom: 14px; border-bottom: 1px solid var(--faint); }
+.review-note p { color: #b9c6d4; font-size: 14px; line-height: 1.5; margin-top: 6px; }
+.review-tips { list-style: none; display: grid; gap: 10px; margin-top: 14px; }
+.review-tips li { position: relative; padding-left: 18px; color: #c9d4df; font-size: 14px; line-height: 1.45; }
+.review-tips li::before { content: ''; position: absolute; left: 2px; top: 0.55em; width: 7px; height: 7px; background: #f2c84b; clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+.review footer { display: flex; justify-content: space-between; align-items: center; margin-top: 16px; padding-top: 10px; border-top: 1px solid var(--faint); color: var(--muted); font-size: 12.5px; }
+.review footer .btn-quiet { padding: 6px 12px; font-size: 12.5px; }
+.review[data-busy] #review-again { pointer-events: none; opacity: 0.5; }
 
 @media (prefers-reduced-motion: reduce) {
   .live-dot, .pair-dot, .edge-cue svg { animation: none !important; }

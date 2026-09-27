@@ -33,6 +33,7 @@ ipcMain.on('open-genome', () => {
 
 ipcMain.handle('tcell:mesh-command', (_e, cmd) => backend?.sendMeshCommand(cmd));
 ipcMain.handle('tcell:run-test-threat', () => backend?.runTestThreat());
+ipcMain.handle('tcell:advisor-review', (_e, force) => backend?.getReview(force) ?? null);
 
 app.whenReady().then(() => {
   backend = startBackend();

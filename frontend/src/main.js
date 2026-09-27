@@ -1,8 +1,9 @@
 import gsap from 'gsap';
-import { feed, state, inject, suppress, ALLELES, ACT_LABEL, evaluate, startPairing, cancelPairing, revoke, joinByUri } from './data.js';
+import { feed, state, inject, suppress, ALLELES, ACT_LABEL, evaluate, startPairing, cancelPairing, revoke, joinByUri, getReview } from './data.js';
 import QRCode from 'qrcode';
 import { createHelix } from './helix.js';
 import { createMesh, LABEL, GLYPH } from './mesh.js';
+import { createAdvisorAvatar } from './advisor.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -104,7 +105,62 @@ function renderHealth() {
   $('#f-cures').textContent = state.genes.filter((g) => !g.suppressed).length;
   $('#live-text').textContent = phase === 'clean' ? `Protecting ${state.devices.length} device${state.devices.length === 1 ? '' : 's'}` : LABEL[phase === 'cured' ? 'cured' : phase];
   document.body.dataset.alert = phase;
+  avatar.setMood(phase);
 }
+
+// ---------- Advisor (weekly review + incident notes from advisor-service) ----------
+const avatar = createAdvisorAvatar($('#advisor-gl'), { reduced });
+const reviewPop = $('#review');
+const say = (text) => ($('#advisor-say').textContent = text);
+const unread = (on) => ($('#advisor-dot').hidden = !on);
+
+async function loadReview(force = false) {
+  reviewPop.dataset.busy = '';
+  if (force) say('Looking over your week…');
+  const r = await getReview(force);
+  delete reviewPop.dataset.busy;
+  if (!r) {
+    say('Weekly reviews need the advisor. It isn’t connected.');
+    $('#review-head').textContent = 'The advisor isn’t connected, so there’s no weekly review yet.';
+    $('#review-tips').replaceChildren();
+    $('#review-when').textContent = 'Set TCELL_ADVISOR_URL to turn it on';
+    $('#review-again').hidden = true;
+    return;
+  }
+  if (r.error) {
+    say('Couldn’t reach the advisor. Click me to try again.');
+    $('#review-head').textContent = 'Couldn’t reach the advisor to review your week.';
+    $('#review-tips').replaceChildren();
+    $('#review-when').textContent = 'Your devices are still protected';
+    return;
+  }
+  say(force ? 'Your review is updated. Click me to read it.' : 'Your weekly review is ready. Click me to read it.');
+  $('#review-head').textContent = r.review.headline;
+  $('#review-tips').replaceChildren(...r.review.tips.map((t) => Object.assign(document.createElement('li'), { textContent: t })));
+  $('#review-when').innerHTML = `Reviewed <time data-t="${r.at}">${ago(r.at)}</time>`;
+  unread(true);
+  avatar.nudge();
+}
+
+$('#advisor-btn').addEventListener('click', (e) => {
+  if (!avatar.takeClick()) return e.preventDefault(); // that was a drag, not a tap
+  avatar.hop();
+});
+reviewPop.addEventListener('toggle', (e) => {
+  $('#advisor-btn').setAttribute('aria-expanded', e.newState === 'open');
+  if (e.newState === 'open') {
+    unread(false);
+    say('Click me any time for your weekly review.');
+  }
+});
+$('#review-again').addEventListener('click', () => loadReview(true));
+feed.addEventListener('advice', ({ detail }) => {
+  $('#review-note-text').textContent = detail.narration;
+  $('#review-note').hidden = false;
+  say('I have a note about the threat I just saw.');
+  unread(true);
+  avatar.nudge();
+});
 
 // ---------- Mesh ----------
 const mesh = createMesh($('#mesh'), state.devices, state.self, { reduced, onPick: (id) => askRemove(id) });
@@ -251,7 +307,7 @@ function renderContrib() {
 
 // ---------- Terminal ----------
 const term = $('#term');
-const SRC = ['tes', 'scout', 'soldier', 'ledger', 'mesh'];
+const SRC = ['tes', 'scout', 'soldier', 'ledger', 'mesh', 'advisor'];
 const counts = Object.fromEntries(SRC.map((s) => [s, 0]));
 const hiddenSrc = new Set();
 let follow = true;
@@ -440,3 +496,4 @@ renderContrib();
 renderStats();
 renderLedger();
 renderIncident();
+loadReview();

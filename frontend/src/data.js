@@ -9,6 +9,7 @@
 //   'stats'    state.stats / state.lineages refreshed
 //   'log'      detail = { t, src: 'tes'|'scout'|'soldier'|'ledger'|'mesh', level: 'info'|'warn'|'alert'|'ok', msg }
 //   'threat'   state.incident changed (lineage tree, allele search, time-to-immunity marks, suppression)
+//   'advice'   detail = { threat_id, narration } the advisor explained an incident (live only)
 //   'pair'     detail = { phase: 'paired', device } a device redeemed this device's pairing code | { phase: 'error', error: 'Expired'|'NonceMismatch' } | { phase: 'expired' }
 
 export const feed = new EventTarget();
@@ -335,6 +336,28 @@ export function revoke(id) {
 let nextIncident;
 const runIncident = () => incident().then(() => (nextIncident = setTimeout(runIncident, rand(9000, 16000))));
 // Demo control: start an incident now instead of waiting for the next random one.
+// Weekly review from the advisor (advisor-service /v1/review): { at, summary, review: { headline, tips[] } },
+// null when no advisor is configured, { error } when unreachable. Live mode caches it for a week in backend.cjs.
+export async function getReview(force = false) {
+  if (state.source === 'live') {
+    try {
+      return (await window.tcell.getReview?.(force)) ?? null;
+    } catch (e) {
+      return { error: e.message }; // IPC failed (e.g. main process predates the handler): say so, never hang
+    }
+  }
+  // ponytail: canned review in the browser sim, there is no model to ask.
+  await new Promise((r) => setTimeout(r, force ? 1400 : 300));
+  return {
+    at: Date.now() - (force ? 0 : 2 * 24 * HOUR),
+    summary: { incidents: state.stoppedThisWeek, incidents_prior_week: 1 },
+    review: {
+      headline: 'Most threats this week started from downloaded files.',
+      tips: ['Open attachments only from people you were expecting them from.', 'Clear out your Downloads folder once a week.', 'Keep Time Machine on; something tried to delete your backups.'],
+    },
+  };
+}
+
 export function inject() {
   if (state.source === 'live') return window.tcell.runTestThreat(); // fire-and-forget scripts/test_threat.sh; Scout (already running) is what observes it
   if (state.incident && !state.incident.done) return;
@@ -577,6 +600,9 @@ function onMesh(payload) {
   log('mesh', payload.type === 'pair_error' ? 'warn' : 'info', JSON.stringify(payload)); // listening/pair_error/hint
 }
 
+// backend.cjs names errors after its child processes; the terminal filters by pipeline stage.
+const ERR_SRC = { meshd: 'mesh', feed: 'ledger' };
+
 function real() {
   state.devices = state.devices.filter((d) => d.id === state.self); // the other 4 were fictional; only real paired peers join from here
   // cpu/mem get overwritten within ~1s by the first real hoststats poll, but
@@ -593,7 +619,8 @@ function real() {
     else if (channel === 'ledger') onLedger(payload);
     else if (channel === 'hoststats') onHostStats(payload);
     else if (channel === 'wake') log('scout', 'info', `wake queued for threat ${payload.threat_id.slice(0, 12)}…`);
-    else if (channel === 'error') log(payload.source ?? 'tes', 'warn', payload.message);
+    else if (channel === 'error') log(ERR_SRC[payload.source] ?? payload.source ?? 'tes', 'warn', payload.message);
+    else if (channel === 'advisor' && payload.narration) emit('advice', payload);
   });
 }
 

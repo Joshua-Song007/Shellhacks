@@ -70,6 +70,7 @@ function defaultConfig() {
 // event, the detection/cure path never waits on it.
 const ADVISOR_TIMEOUT_MS = 30000;
 const MAX_BUFFERED_PROGRESS = 64;
+const REVIEW_MAX_AGE_MS = 7 * 24 * 3600 * 1000; // weekly review cadence
 
 function makeAdvisorRelay(events, cfg) {
   const progressByRoot = new Map();
@@ -81,6 +82,19 @@ function makeAdvisorRelay(events, cfg) {
     const pub = b.subarray(b.length - 32);
     const key = crypto.createPrivateKey({ key: { kty: 'OKP', crv: 'Ed25519', d: seed.toString('base64url'), x: pub.toString('base64url') }, format: 'jwk' });
     return { key, pubHex: pub.toString('hex') };
+  }
+
+  async function signedPost(route, payload) {
+    const body = Buffer.from(JSON.stringify({ sent_ms: Date.now(), ...payload }));
+    const { key, pubHex } = loadKey();
+    const res = await fetch(new URL(route, cfg.advisorUrl), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-tcell-pubkey': pubHex, 'x-tcell-sig': crypto.sign(null, body, key).toString('hex') },
+      body,
+      signal: AbortSignal.timeout(ADVISOR_TIMEOUT_MS),
+    });
+    if (!res.ok) throw new Error(`advisor HTTP ${res.status}`);
+    return res.json();
   }
 
   async function post(record) {
@@ -95,20 +109,34 @@ function makeAdvisorRelay(events, cfg) {
       attack_ids: d.attack_ids,
       latency_ns: d.latency_ns,
     };
-    const body = Buffer.from(JSON.stringify({ sent_ms: Date.now(), incident, raw }));
-    const { key, pubHex } = loadKey();
-    const res = await fetch(new URL('/v1/incident', cfg.advisorUrl), {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-tcell-pubkey': pubHex, 'x-tcell-sig': crypto.sign(null, body, key).toString('hex') },
-      body,
-      signal: AbortSignal.timeout(ADVISOR_TIMEOUT_MS),
-    });
-    if (!res.ok) throw new Error(`advisor HTTP ${res.status}`);
-    const { narration, trend } = await res.json();
+    const { narration, trend } = await signedPost('/v1/incident', { incident, raw });
     events.emit('advisor', { threat_id: incident.threat_id, narration, trend });
   }
 
-  return function onScout(record) {
+  // Weekly review, cached on disk so it runs once a week, not per launch.
+  // null = advisor off; { error } = unreachable (the UI says so, never blocks).
+  const reviewCache = path.join(TCELL_HOME, 'advisor_review.json');
+  async function getReview(force = false) {
+    if (!cfg.advisorUrl) return null;
+    if (!force) {
+      try {
+        const cached = JSON.parse(fs.readFileSync(reviewCache, 'utf8'));
+        if (Date.now() - cached.at < REVIEW_MAX_AGE_MS) return cached;
+      } catch {}
+    }
+    try {
+      const { summary, review } = await signedPost('/v1/review', {});
+      if (!review) return { error: 'model unavailable' };
+      const out = { at: Date.now(), summary, review };
+      fs.writeFileSync(reviewCache, JSON.stringify(out));
+      return out;
+    } catch (e) {
+      events.emit('error', { source: 'advisor', message: e.message });
+      return { error: e.message };
+    }
+  }
+
+  function onScout(record) {
     if (!cfg.advisorUrl) return;
     if (record.type === 'progress') {
       const root = record.progress.root_exe;
@@ -118,7 +146,9 @@ function makeAdvisorRelay(events, cfg) {
     } else if (record.type === 'detection') {
       post(record).catch((e) => events.emit('error', { source: 'advisor', message: e.message }));
     }
-  };
+  }
+
+  return { onScout, getReview };
 }
 
 function tryParseJson(line) {
@@ -326,7 +356,7 @@ function startBackend(overrides = {}) {
       const record = tryParseJson(line);
       if (record) {
         events.emit('scout', record);
-        advisor(record);
+        advisor.onScout(record);
       }
     },
   });
@@ -365,6 +395,7 @@ function startBackend(overrides = {}) {
         meshd.child.stdin.write(`${JSON.stringify(cmd)}\n`);
       }
     },
+    getReview: advisor.getReview,
     runTestThreat() {
       spawn('sh', [cfg.testThreatScript], { stdio: 'ignore' });
     },
