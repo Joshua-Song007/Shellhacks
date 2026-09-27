@@ -456,10 +456,54 @@ function scheduleCuredRevert(id) {
   }, CURED_REVERT_MS);
 }
 
+// Real bug caught live: under a live eslogger Scout, ordinary macOS background
+// daemons (Spotlight's corespotlightd, cfprefsd, corecaptured, ScreenTimeAgent
+// -- all legitimate system processes, none malicious) routinely trip a
+// partial, never-convicted RapidFileModBurst score on their own, completely
+// unrelated to any test. Every one of them is a NEW lineage's first progress
+// event, and 'watching' had NO revert of its own (unlike 'cured', above) --
+// so the device status pill got set to 'watching' and then simply never
+// reset, and since a new benign lineage trips this every few seconds to
+// minutes on a live system, the device showed permanently yellow instead of
+// "Safe" almost the entire time. Debounced (not a single fire-once timer
+// like scheduleCuredRevert): every progress event of ANY lineage refreshes
+// this same timer, so an actively-accumulating lineage (still short of full
+// conviction) keeps the status pinned on 'watching' the whole time it's
+// producing new actions, and only reverts to 'clean' after a real quiet
+// period. Guarded on the status still being 'watching' at fire time, so it's
+// a no-op once a real detection has since escalated to 'isolated' or a cure
+// has already moved it to 'cured'.
+const WATCHING_REVERT_MS = 5000;
+let watchingRevertTimer = null;
+function scheduleWatchingRevert(id) {
+  clearTimeout(watchingRevertTimer);
+  watchingRevertTimer = setTimeout(() => {
+    const d = device(id);
+    if (d && d.status === 'watching') {
+      setStatus(id, 'clean');
+      emit('incident', { device: id, phase: 'clear' });
+      // Real bug: this revert only ever touched the device-status pill --
+      // the Threat response PANEL (state.incident) is a completely separate
+      // pointer, so it kept showing whatever partial lineage was last
+      // displayed forever, with no dismiss button either (the "Clear test"
+      // toggle only appears once marks.detect/immune/done fires, none of
+      // which a merely-watched, never-convicted lineage ever reaches) --
+      // "Safe" on the pill, "tracking a threat" in the panel, permanently.
+      // Only auto-clear a lineage that never escalated to a real conviction
+      // (marks.detect) -- a genuinely convicted incident (test or real) still
+      // requires the explicit "Clear test" dismiss, unchanged.
+      if (state.incident && !state.incident.marks.detect) {
+        state.incident = null;
+        emit('threat', null);
+      }
+    }
+  }, WATCHING_REVERT_MS);
+}
+
 function liveIncidentFor(rootExe) {
   let inc = liveIncidents.get(rootExe);
   if (!inc) {
-    inc = { device: state.self, threat: null, actions: [], threatId: null, t0: Date.now(), marks: {}, score: 0, tree: { parent: null, child: null, acts: [] }, search: null, gene: null, done: false };
+    inc = { device: state.self, threat: null, actions: [], threatId: null, t0: Date.now(), lastSeen: Date.now(), marks: {}, score: 0, tree: { parent: null, child: null, acts: [] }, search: null, gene: null, done: false };
     liveIncidents.set(rootExe, inc);
   }
   // Scout watches the WHOLE system, not just the deliberate test lineage --
@@ -477,6 +521,22 @@ function liveIncidentFor(rootExe) {
   return inc;
 }
 
+// Advanced-view-only visibility into background Scout activity: lineages
+// currently accumulating a partial (never-convicted) score, separate from
+// the single Threat response panel above (state.incident only ever shows
+// ONE incident at a time, per the conflation fix above -- background noise
+// like corespotlightd/BiomeAgent no longer has to hijack it to be seen at
+// all). Same freshness window as scheduleWatchingRevert, so a lineage drops
+// off this list at exactly the moment the status pill itself reverts to
+// 'clean'. Sim mode has no liveIncidents, so this is always empty there.
+export function watchingLineages() {
+  const now = Date.now();
+  return [...liveIncidents.values()]
+    .filter((inc) => !inc.marks.detect && now - inc.lastSeen < WATCHING_REVERT_MS)
+    .sort((a, b) => b.lastSeen - a.lastSeen)
+    .map((inc) => ({ exe: inc.tree.child?.exe ?? 'unknown', score: inc.score, threat: inc.threat }));
+}
+
 function onScout(payload) {
   if (payload.type === 'progress') {
     const p = payload.progress;
@@ -491,6 +551,7 @@ function onScout(payload) {
       emit('incident', { device: state.self, phase: 'watching', threat: schemaLabel([p.action]) });
     }
     inc.score = p.score;
+    inc.lastSeen = Date.now();
     inc.actions = [...inc.actions, p.action];
     inc.tree.acts.push({ action: p.action, weight: WEIGHT[p.action], attack: p.attack_id, tes: p.event });
     inc.threat = schemaLabel(inc.actions);
@@ -498,6 +559,7 @@ function onScout(payload) {
     if (typeof p.event?.recv_ns === 'number' && typeof p.event?.ts_ns === 'number') {
       lastLagMs = Math.max(0, (p.event.recv_ns - p.event.ts_ns) / 1e6); // real pipeline lag (NFR-1), ms precision only -- u64 ns round-trips JSON as a float64, sub-us error here doesn't matter
     }
+    scheduleWatchingRevert(state.self);
     changed();
     return;
   }

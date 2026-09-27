@@ -237,6 +237,12 @@ details[open] .c-chev { transform: rotate(180deg); }
 .kv dt { color: var(--muted); font-size: 12px; }
 .kv dd { font: 500 14px/1.4 var(--mono); }
 
+.sys h3 { font: 500 12.5px/1 var(--body); color: var(--muted); margin: 14px 0 8px; }
+.watchlist { list-style: none; display: flex; flex-direction: column; gap: 6px; max-height: 110px; overflow-y: auto; }
+.watchlist li:not(.empty) { display: flex; justify-content: space-between; gap: 10px; font-size: 12.5px; background: var(--raise); border-radius: 8px; padding: 6px 10px; }
+.watchlist li:not(.empty) span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.watchlist b { font: 500 12.5px/1 var(--mono); color: var(--amber); flex: none; }
+
 .peers, .ledger { overflow-y: auto; }
 .tbl { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .tbl th { text-align: left; font-weight: 500; color: var(--muted); padding: 0 10px 8px 0; }

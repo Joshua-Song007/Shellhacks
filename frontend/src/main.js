@@ -1,5 +1,5 @@
 import gsap from 'gsap';
-import { feed, state, inject, clearIncident, suppress, ALLELES, ACT_LABEL, ATTACK, THREATS, evaluate, startPairing, cancelPairing, revoke, joinByUri, getReview } from './data.js';
+import { feed, state, inject, clearIncident, suppress, ALLELES, ACT_LABEL, ATTACK, THREATS, evaluate, startPairing, cancelPairing, revoke, joinByUri, getReview, watchingLineages } from './data.js';
 import QRCode from 'qrcode';
 import { createHelix } from './helix.js';
 import { createMesh, LABEL, GLYPH } from './mesh.js';
@@ -605,6 +605,20 @@ $('#inc-body').addEventListener('click', (e) => {
 });
 addEventListener('keydown', (e) => e.key === 'Escape' && closeInspect());
 
+// Advanced-view-only visibility into background Scout activity: lineages
+// currently accumulating a partial (never-convicted) score, distinct from
+// the single Threat response panel above (which only ever shows one
+// incident, and no longer even has to be hijacked by background noise to
+// display it -- see data.js's liveIncidentFor/scheduleWatchingRevert notes).
+// Membership is time-based (a lineage drops off once it's gone quiet), so
+// this needs its own periodic re-render, not just an event-driven one.
+function renderWatchlist() {
+  const list = $('#watchlist');
+  if (!list) return;
+  const rows = watchingLineages();
+  list.innerHTML = rows.length ? rows.map((r) => `<li><span>${esc(base(r.exe))}</span><b>${r.score}/100</b></li>`).join('') : '<li class="empty">Nothing partially scoring right now.</li>';
+}
+
 // ---------- Wiring ----------
 feed.addEventListener('devices', () => {
   mesh.update(state.devices);
@@ -629,12 +643,15 @@ feed.addEventListener('stats', renderStats);
 feed.addEventListener('threat', () => {
   renderIncident();
   renderHealth();
+  renderWatchlist();
 });
 setInterval(() => document.querySelectorAll('time[data-t]').forEach((t) => (t.textContent = ago(+t.dataset.t))), 5000);
+setInterval(renderWatchlist, 2000); // membership is time-based (quiet lineages drop off on their own), so this can't rely on events alone
 
 renderHealth();
 renderContrib();
 renderStats();
 renderLedger();
+renderWatchlist();
 renderIncident();
 loadReview();
