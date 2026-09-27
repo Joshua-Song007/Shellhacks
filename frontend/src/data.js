@@ -492,6 +492,13 @@ function scheduleWatchingRevert(id) {
   clearTimeout(watchingRevertTimer);
   watchingRevertTimer = setTimeout(() => {
     const d = device(id);
+    // Panel clear is independent of the pill: a status that had already moved
+    // on (cured -> clean) used to skip this and strand a partial lineage on the
+    // Threat response panel with its stopwatch running forever.
+    if (state.incident && !state.incident.marks.detect) {
+      state.incident = null;
+      emit('threat', null);
+    }
     if (d && d.status === 'watching') {
       setStatus(id, 'clean');
       emit('incident', { device: id, phase: 'clear' });
@@ -513,7 +520,7 @@ function scheduleWatchingRevert(id) {
   }, WATCHING_REVERT_MS);
 }
 
-function liveIncidentFor(rootExe) {
+function liveIncidentFor(rootExe, convicted = false) {
   let inc = liveIncidents.get(rootExe);
   if (!inc) {
     inc = { key: rootExe, device: state.self, threat: null, actions: [], threatId: null, t0: Date.now(), lastSeen: Date.now(), marks: {}, score: 0, tree: { parent: null, child: null, acts: [] }, search: null, gene: null, done: false };
@@ -530,7 +537,11 @@ function liveIncidentFor(rootExe) {
   // detect/cure/ledger activity still proceeds correctly in the background.
   const cur = state.incident;
   const curFinished = !cur || cur.done || !!cur.marks.immune;
-  if (cur === inc || curFinished) state.incident = inc;
+  // A FINISHED incident stays on screen until "Clear test" (or a real
+  // conviction replaces it) -- a background daemon's partial score used to
+  // take the panel the moment a test finished, restarting the stopwatch on
+  // a lineage that may never convict. Partials live in the watch list now.
+  if (cur === inc || !cur || (convicted && curFinished)) state.incident = inc;
   return inc;
 }
 
@@ -648,7 +659,7 @@ function onScout(payload) {
   }
   if (payload.type === 'detection') {
     const d = payload.detection;
-    const inc = liveIncidentFor(d.root_exe);
+    const inc = liveIncidentFor(d.root_exe, true);
     const changed = () => emit('threat', inc);
     inc.threatId = d.wake.threat_id;
     inc.threat = inc.threat ?? schemaLabel(d.wake.schema);

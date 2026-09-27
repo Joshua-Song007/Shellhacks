@@ -10,7 +10,7 @@
     "web": "vite --port 5174 --strictPort",
     "build": "vite build",
     "start": "vite build && electron .",
-    "build:bins": "cd .. && cargo build --release --workspace --examples && cc -O0 -o target/release/test_threat_payload scripts/test_threat.c",
+    "build:bins": "cd .. && cargo build --release --workspace --bins --examples && cc -O0 -o target/release/test_threat_payload scripts/test_threat.c",
     "dist": "npm run build:bins && vite build && electron-builder --mac dmg"
   },
   "dependencies": {
