@@ -516,7 +516,20 @@ function renderIncident() {
   // of silently starting another run over it.
   injectBtn.textContent = finished ? 'Clear test' : 'Run test threat';
   if (!inc) {
+    // clearIncident() nulls state.incident, but this branch used to only ever
+    // touch #inc-body -- #watch (timer), #tti (the step bar), and .inc's
+    // data-live (bar color) live OUTSIDE inc-body and were left showing the
+    // just-finished incident's stale values forever. Also cancel any pending
+    // watchRaf: a not-yet-`immune` incident (e.g. the `suppressed`/refused
+    // path, which sets `done` without ever setting `marks.immune`) leaves
+    // tick() still scheduled, and the next frame would read state.incident
+    // (now null) and throw.
+    cancelAnimationFrame(watchRaf);
+    delete $('.inc').dataset.live;
+    $('#watch').textContent = '00:00.00';
+    $('#tti').innerHTML = STEPS.map(([, label]) => `<li><span>${label}</span><b>—</b></li>`).join('');
     $('#inc-body').innerHTML = '<p class="empty">No threats yet. Scout is watching every process on this network. Run a test threat to see the full response.</p>';
+    if (inspecting) closeInspect(); // the inspect popout shows a node from the now-cleared incident's tree
     return;
   }
   cancelAnimationFrame(watchRaf);
