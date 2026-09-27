@@ -724,10 +724,22 @@ function onSoldier(payload) {
     // going to arrive here. Without this, the device stayed on whatever
     // status detection last set ('isolated') forever, even though the
     // incident timeline itself already showed every step, including
-    // "Home immune", as done. state.genes is left untouched here (unlike
-    // onLedger's commit_gene branch) -- this device didn't just add a new
-    // chain entry, the gene got here via an earlier commit_gene or a
-    // 'genome' record ingest, both of which already populate it.
+    // "Home immune", as done.
+    // state.genes: usually already populated by the time Inherit fires --
+    // either this device's own earlier commit_gene, or onLedger's 'genome'
+    // record ingest backfilling it from chain (including on first poll,
+    // per that branch's own note). But that's an assumption, not a
+    // guarantee: if another device committed this exact gene more recently
+    // than this device's own ledger feed has polled, Inherit can legitimately
+    // fire before a matching 'genome' record ever arrives -- Soldier's own
+    // FR-L-7 check is a direct, immediate RPC read, not gated on this
+    // feed's poll interval. Backfill it here too if still missing, so the
+    // local Immune memory helix never silently misses a gene this device
+    // genuinely adopted and applied.
+    if (!state.genes.some((g) => g.gene === payload.gene_hash)) {
+      state.genes.push({ threat: payload.threat_id, gene: payload.gene_hash, name: schemaLabel(payload.schema), from: 'network', time: Date.now(), bytes: undefined });
+      emit('genes', state.genes);
+    }
     state.stoppedThisWeek++;
     setStatus(state.self, 'cured');
     scheduleCuredRevert(state.self);
