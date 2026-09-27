@@ -79,7 +79,7 @@ body[data-alert='cured'] .live-dot { background: var(--t); box-shadow: 0 0 10px 
   grid-template-rows: auto minmax(0, 1fr);
   grid-template-areas: 'health health memory' 'mesh contrib memory';
 }
-.health { grid-area: health; }
+.health { grid-area: health; overflow: visible; z-index: 1; } /* the advisor's hop overhangs the panel edge */
 .mesh { grid-area: mesh; }
 .memory { grid-area: memory; }
 .contrib { grid-area: contrib; }
@@ -373,13 +373,13 @@ body[data-alert='cured'] .live-dot { background: var(--t); box-shadow: 0 0 10px 
 
 /* Advisor: the d20 companion in the health hero; its voice colour is its own gold, apart from the teal system UI */
 .advisor { --voice: #f2c84b; anchor-name: --advisor; width: clamp(160px, 16vw, 230px); display: grid; justify-items: center; gap: 4px; align-self: center; }
-.advisor-avatar { position: relative; width: 100%; aspect-ratio: 1; padding: 0; border: 0; border-radius: 50%; background: none; cursor: grab; }
+.advisor-avatar { position: relative; touch-action: none; width: 100%; aspect-ratio: 1; padding: 0; border: 0; border-radius: 50%; background: none; cursor: grab; }
 .advisor-avatar:active { cursor: grabbing; }
 .advisor-avatar canvas { transition: transform 0.3s cubic-bezier(0.3, 1.6, 0.5, 1), filter 0.4s; }
 .advisor-avatar:hover canvas { transform: translateY(-4px) scale(1.03); }
-body[data-alert='watching'] .advisor-avatar canvas, body[data-alert='isolated'] .advisor-avatar canvas { filter: saturate(0.7) brightness(0.8); }
+body[data-alert='watching'] .advisor-avatar canvas, body[data-alert='isolated'] .advisor-avatar canvas { filter: none; } /* quieter during alerts: lose the glow, keep the colour */
 .advisor-avatar:focus-visible { outline: 2px solid var(--voice); outline-offset: -8px; }
-.advisor-avatar canvas { display: block; width: 100%; height: 100%; touch-action: none; filter: drop-shadow(0 0 22px rgb(242 200 75 / 0.22)); }
+.advisor-avatar canvas { position: absolute; inset: -30%; width: 160%; height: 160%; pointer-events: none; filter: drop-shadow(0 0 22px rgb(242 200 75 / 0.22)); }
 .advisor-dot { position: absolute; top: 16%; right: 20%; width: 10px; height: 10px; border-radius: 50%; background: var(--voice); box-shadow: 0 0 0 3px var(--panel), 0 0 12px var(--voice); }
 .advisor-say { max-width: 26ch; min-height: 2.8em; color: var(--muted); font-size: 13px; line-height: 1.4; text-align: center; text-wrap: balance; }
 .review {

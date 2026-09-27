@@ -7,10 +7,10 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-t_cell = "27v76nMPKQg5akQHBsPHnhPt8K7kSf3s8GZjRzUnvBuq"
+t_cell = "5zYHmq4nRceYcxtyyhRCW3RRAYf6j7cN6V7e6dz9DJPy"
 
 [programs.devnet]
-t_cell = "27v76nMPKQg5akQHBsPHnhPt8K7kSf3s8GZjRzUnvBuq"
+t_cell = "5zYHmq4nRceYcxtyyhRCW3RRAYf6j7cN6V7e6dz9DJPy"
 
 [provider]
 cluster = "devnet"

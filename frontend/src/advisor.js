@@ -64,12 +64,14 @@ function groundShadow() {
   return m;
 }
 
+const FOV = 32; // vertical fov across the button's own height
+
 export function createAdvisorAvatar(canvas, { reduced = false } = {}) {
-  const box = canvas.parentElement;
+  const box = canvas.parentElement; // the hit area; the canvas overhangs it so hops aren't clipped
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(32, 1, 0.1, 50);
+  const camera = new THREE.PerspectiveCamera(FOV, 1, 0.1, 50);
   camera.position.set(0, 0.05, 4.7);
 
   scene.add(new THREE.HemisphereLight('#fff8e0', '#ffb070', 2.4));
@@ -184,9 +186,9 @@ export function createAdvisorAvatar(canvas, { reduced = false } = {}) {
     drag.x = e.clientX;
     drag.y = e.clientY;
   });
-  canvas.addEventListener('pointerdown', (e) => {
+  box.addEventListener('pointerdown', (e) => {
     drag = { x: e.clientX, y: e.clientY, moved: false };
-    canvas.setPointerCapture(e.pointerId);
+    box.setPointerCapture(e.pointerId);
     gsap.to(m, { eye: 0.25, sx: 1.06, sy: 0.94, duration: 0.15 }); // squeezed
   });
   const release = () => {
@@ -195,14 +197,16 @@ export function createAdvisorAvatar(canvas, { reduced = false } = {}) {
     drag = null;
     gsap.to(m, { eye: 1, sx: 1, sy: 1, duration: 0.35, ease: 'back.out(3)' });
   };
-  canvas.addEventListener('pointerup', release);
-  canvas.addEventListener('pointercancel', release);
+  box.addEventListener('pointerup', release);
+  box.addEventListener('pointercancel', release);
 
   const size = () => {
-    const w = box.clientWidth;
-    const h = box.clientHeight;
-    if (!w || !h) return;
+    const w = canvas.clientWidth;
+    const h = canvas.clientHeight;
+    if (!w || !h || !box.clientHeight) return;
     renderer.setSize(w, h, false);
+    // Widen the view by the overhang so the avatar keeps the size it has in the box.
+    camera.fov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(FOV / 2)) * (h / box.clientHeight)));
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
   };

@@ -10,7 +10,7 @@ pub use constants::*;
 pub use instructions::*;
 pub use state::*;
 
-declare_id!("27v76nMPKQg5akQHBsPHnhPt8K7kSf3s8GZjRzUnvBuq");
+declare_id!("5zYHmq4nRceYcxtyyhRCW3RRAYf6j7cN6V7e6dz9DJPy");
 
 #[program]
 pub mod t_cell {
