@@ -12,7 +12,7 @@ scrollTo(0, 0);
 addEventListener('pagehide', () => scrollTo(0, 0)); // some browsers restore anyway; leave at the top
 
 // ponytail: placeholder until the Tauri .dmg is published; swap for the release URL.
-const DOWNLOAD_URL = 'https://github.com/REPLACE_ME/t-cell/releases/latest';
+const DOWNLOAD_URL = 'https://tcell-downloads.nyc3.cdn.digitaloceanspaces.com/T-Cell-0.1.0-arm64.dmg';
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
