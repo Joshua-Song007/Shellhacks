@@ -232,7 +232,7 @@ $('#d-close').addEventListener('click', close);
 addEventListener('keydown', (e) => e.key === 'Escape' && close());
 
 function renderStats() {
-  $('#gs-genes').textContent = fmt(state.stats.globalGenes);
+  $('#gs-genes').textContent = fmt(genes.length); // exactly the cures drawn in the helix (demo history + real chain cures), per user decision
   $('#gs-devices').textContent = fmt(state.stats.globalDevices);
   $('#gs-slot').textContent = fmt(state.stats.slot);
 }
@@ -243,6 +243,7 @@ feed.addEventListener('block', ({ detail: b }) => {
   if (b.kind !== 'commit_gene' || genes.some((g) => g.gene === b.gene)) return;
   genes.push(cure({ gene: b.gene, name: b.name ?? THREATS[(Math.random() * THREATS.length) | 0].name, slot: b.slot, signers: b.signers, threat: b.threat, time: b.time, devices: 1 }));
   helix.add(b.gene);
+  renderStats();
   const toast = $('#toast');
   toast.textContent = `New cure committed at block ${fmt(b.slot)}`;
   gsap.fromTo(toast, { opacity: 0, y: 8 }, { opacity: 1, y: 0, duration: reduced ? 0 : 0.5, ease: 'power3.out', overwrite: true });
@@ -264,6 +265,7 @@ async function showGene(g) {
     genes.push(cure({ ...g, slot: g.time ? slotAt(g.time) : state.stats.slot, signers: 3, devices: 1 }));
     i = genes.length - 1;
     helix.add(g.gene);
+    renderStats();
   }
   const at = await helix.reveal(i);
   if (open !== i) select(at);

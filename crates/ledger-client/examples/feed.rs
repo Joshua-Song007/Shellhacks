@@ -49,7 +49,6 @@ fn main() {
 
     let mut last_seen_signature: Option<String> = None;
     let mut seen_genomes: HashMap<[u8; 32], ([u8; 32], bool)> = HashMap::new();
-    let mut last_stats: Option<(usize, usize)> = None;
     let mut first_tick = true;
 
     loop {
@@ -100,16 +99,13 @@ fn main() {
             }
         };
 
-        // Network-wide totals for the Global genome window, emitted on change
-        // (first tick included) -- a diff-only feed can't total these itself.
+        // Network-wide totals for the Global genome window, emitted every tick:
+        // a window opened after startup has no replay, so on-change-only left it at 0.
         if let Some(genomes) = genomes {
             match client.all_threats() {
                 Ok(threats) => {
-                    let stats = network_stats(&genomes, &threats);
-                    if last_stats != Some(stats) {
-                        emit(serde_json::json!({"type": "network_stats", "cures": stats.0, "devices": stats.1}));
-                        last_stats = Some(stats);
-                    }
+                    let (cures, devices) = network_stats(&genomes, &threats);
+                    emit(serde_json::json!({"type": "network_stats", "cures": cures, "devices": devices}));
                 }
                 Err(e) => emit(serde_json::json!({"type": "error", "source": "all_threats", "message": e.to_string()})),
             }
