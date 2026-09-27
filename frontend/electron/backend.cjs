@@ -50,6 +50,7 @@ function defaultConfig() {
     soldierBin: path.join(ROOT, 'target/debug/soldier'),
     meshdBin: path.join(ROOT, 'target/debug/meshd'),
     feedBin: path.join(ROOT, 'target/debug/examples/feed'),
+    suppressBin: path.join(ROOT, 'target/debug/examples/suppress'),
     testThreatScript: path.join(ROOT, 'scripts/test_threat.sh'),
     scoutMode: process.env.TCELL_SCOUT_MODE || 'libproc', // NFR-3: no-root default
     rpcUrl: process.env.TCELL_RPC_URL || null, // null -> each bin's own devnet default
@@ -191,6 +192,28 @@ function spawnLineReader(events, name, cmd, args, { onLine, restart, stdin } = {
       if (child) child.kill();
     },
   };
+}
+
+// One-shot spawn+capture, for a binary that runs once and prints a single
+// NDJSON result line -- distinct from spawnLineReader (built for long-lived
+// daemons with auto-restart, wrong shape for a request/response call).
+function runOnce(cmd, args) {
+  return new Promise((resolve, reject) => {
+    if (!fs.existsSync(cmd)) return reject(new Error(`binary not found: ${cmd} (run cargo build --workspace --examples first)`));
+    const child = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    let out = '';
+    child.stdout.on('data', (d) => {
+      out += d;
+    });
+    readline.createInterface({ input: child.stderr }).on('line', (line) => console.error(`[${path.basename(cmd)}] ${line}`));
+    child.on('exit', () => {
+      const line = out.trim().split('\n').filter(Boolean).pop();
+      const record = line && tryParseJson(line);
+      if (record && record.type !== 'error') resolve(record);
+      else reject(new Error(record?.message || `no parseable output (last line: ${JSON.stringify(line)})`));
+    });
+    child.on('error', reject);
+  });
 }
 
 function scoutArgs(cfg) {
@@ -398,6 +421,10 @@ function startBackend(overrides = {}) {
     getReview: advisor.getReview,
     runTestThreat() {
       spawn('sh', [cfg.testThreatScript], { stdio: 'ignore' });
+    },
+    suppressGene(threatIdHex) {
+      const args = [threatIdHex, ...(cfg.rpcUrl ? [cfg.rpcUrl] : [])];
+      return runOnce(cfg.suppressBin, args);
     },
     stop() {
       scout.stop();
