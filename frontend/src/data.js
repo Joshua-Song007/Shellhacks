@@ -522,7 +522,9 @@ function scheduleWatchingRevert(id) {
 
 function liveIncidentFor(rootExe, convicted = false) {
   let inc = liveIncidents.get(rootExe);
-  if (!inc) {
+  // Reruns share a root_exe (every test's lineage root is /bin/bash), so a
+  // finished incident is replaced, not reused with its old t0/marks.
+  if (!inc || inc.done || inc.marks.immune) {
     inc = { key: rootExe, device: state.self, threat: null, actions: [], threatId: null, t0: Date.now(), lastSeen: Date.now(), marks: {}, score: 0, tree: { parent: null, child: null, acts: [] }, search: null, gene: null, done: false };
     liveIncidents.set(rootExe, inc);
   }
@@ -541,7 +543,9 @@ function liveIncidentFor(rootExe, convicted = false) {
   // conviction replaces it) -- a background daemon's partial score used to
   // take the panel the moment a test finished, restarting the stopwatch on
   // a lineage that may never convict. Partials live in the watch list now.
-  if (cur === inc || !cur || (convicted && curFinished)) state.incident = inc;
+  // Not `!cur` alone: after Clear test, the next background partial took the
+  // empty panel and restarted the stopwatch from its own (old) t0.
+  if (cur === inc || (convicted && curFinished)) state.incident = inc;
   return inc;
 }
 
