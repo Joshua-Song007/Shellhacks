@@ -362,7 +362,7 @@ body[data-alert='cured'] .live-dot { background: var(--t); box-shadow: 0 0 10px 
 .pair-wait { display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 13.5px !important; color: var(--muted) !important; }
 .pair-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--amber); box-shadow: 0 0 10px var(--amber); animation: beat 1.4s ease-in-out infinite; }
 .pair-glyph { width: 52px; height: 52px; padding: 11px; border-radius: 50%; background: var(--raise); border: 1.8px solid var(--a); fill: none; stroke: var(--bone); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
-.pair-join-input { resize: none; width: 100%; padding: 10px 12px; border-radius: 10px; background: var(--raise); border: 1px solid var(--faint); color: var(--bone); font: 13px/1.4 var(--mono); }
+.pair-join-input { user-select: text; resize: none; width: 100%; padding: 10px 12px; border-radius: 10px; background: var(--raise); border: 1px solid var(--faint); color: var(--bone); font: 13px/1.4 var(--mono); }
 .pair-join-input:focus-visible { outline: 2px solid var(--a); outline-offset: 2px; }
 .btn-danger { background: var(--threat); color: var(--bone); }
 .btn-danger:hover { background: #ff5c77; }

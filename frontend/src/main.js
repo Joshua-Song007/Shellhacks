@@ -223,6 +223,7 @@ pairDlg.addEventListener('click', (e) => {
   if (act === 'restart') beginPairing();
   if (act === 'copy') navigator.clipboard?.writeText($('#pair-hex').textContent.replace(/ /g, '')).then(() => ($('#pair-copy').textContent = 'Copied'));
   if (act === 'show-join') pairStep('join');
+  if (act === 'paste') navigator.clipboard?.readText().then((t) => ($('#join-uri').value = t.trim()));
   if (act === 'join') {
     const uri = $('#join-uri').value.trim();
     if (!uri) return;
