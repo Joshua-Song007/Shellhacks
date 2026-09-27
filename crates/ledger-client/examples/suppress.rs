@@ -26,6 +26,11 @@ fn main() {
     let committee: Vec<&Keypair> = committee.iter().collect();
 
     let client = LedgerClient::new(&rpc, CommitmentConfig::confirmed());
-    let sig = client.suppress_gene(&payer, &committee, threat_id).expect("suppress_gene");
-    println!("suppress_gene: {sig}");
+    match client.suppress_gene(&payer, &committee, threat_id) {
+        Ok(sig) => println!("{}", serde_json::json!({"type": "suppressed", "threat_id": hex, "signature": sig.to_string()})),
+        Err(e) => {
+            println!("{}", serde_json::json!({"type": "error", "message": e.to_string()}));
+            std::process::exit(1);
+        }
+    }
 }
