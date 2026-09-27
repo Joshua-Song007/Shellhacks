@@ -34,6 +34,12 @@ test('rejects an unknown device', () => {
   assert.throws(() => authenticate(headers, raw, new Set()), /unknown device/);
 });
 
+test('ALLOWED_PUBKEYS=* accepts any device, still checks the signature', () => {
+  const { raw, headers } = signed({ sent_ms: Date.now(), incident });
+  assert.strictEqual(authenticate(headers, raw, new Set(['*'])).pubkey, pubHex);
+  assert.throws(() => authenticate({ ...headers, 'x-tcell-sig': '0'.repeat(128) }, raw, new Set(['*'])), /bad signature/);
+});
+
 test('rejects a stale request', () => {
   const { raw, headers } = signed({ sent_ms: Date.now() - 10 * 60 * 1000, incident });
   assert.throws(() => authenticate(headers, raw, allowed), /stale/);

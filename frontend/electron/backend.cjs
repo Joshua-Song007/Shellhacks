@@ -62,7 +62,7 @@ function defaultConfig() {
     meshState: path.join(TCELL_HOME, 'mesh_state.json'),
     meshPort: process.env.TCELL_MESH_PORT ? Number(process.env.TCELL_MESH_PORT) : 0,
     wakeSocketPath: path.join(os.tmpdir(), 'tcell-wake.sock'),
-    advisorUrl: process.env.TCELL_ADVISOR_URL || null, // null -> advisor relay off
+    advisorUrl: process.env.TCELL_ADVISOR_URL ?? 'https://advisor-kr3vx.ondigitalocean.app', // null -> advisor relay off
   };
 }
 

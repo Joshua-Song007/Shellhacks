@@ -19,7 +19,8 @@ const SPKI_PREFIX = Buffer.from('302a300506032b6570032100', 'hex');
 function authenticate(headers, raw, allowed, now = Date.now()) {
   const pubkey = String(headers['x-tcell-pubkey'] || '').toLowerCase();
   const sig = String(headers['x-tcell-sig'] || '');
-  if (!HEX64.test(pubkey) || !allowed.has(pubkey)) throw new Error('unknown device');
+  // ponytail: ALLOWED_PUBKEYS=* opens it to any device for the download-to-launch demo; signature still proves key possession, but anyone can mint a key, so remove after the demo.
+  if (!HEX64.test(pubkey) || !(allowed.has('*') || allowed.has(pubkey))) throw new Error('unknown device');
   const key = crypto.createPublicKey({ key: Buffer.concat([SPKI_PREFIX, Buffer.from(pubkey, 'hex')]), format: 'der', type: 'spki' });
   if (!/^[0-9a-f]{128}$/i.test(sig) || !crypto.verify(null, raw, key, Buffer.from(sig, 'hex'))) throw new Error('bad signature');
   const body = JSON.parse(raw);
