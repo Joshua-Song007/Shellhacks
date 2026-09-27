@@ -147,7 +147,13 @@ body[data-alert='cured'] .live-dot { background: var(--t); box-shadow: 0 0 10px 
 /* Contributions */
 .contrib { display: grid; grid-template-rows: auto minmax(0, 1fr); }
 .contrib-list { list-style: none; overflow-y: auto; margin-right: -10px; padding-right: 10px; }
-.contrib-list li:not(.empty) { display: grid; grid-template-columns: auto 1fr auto; gap: 14px; align-items: center; padding: 12px 0; border-top: 1px solid var(--faint); }
+.contrib-list li:not(.empty) { border-top: 1px solid var(--faint); }
+.contrib-list summary { display: grid; grid-template-columns: auto 1fr auto auto; gap: 14px; align-items: center; padding: 12px 0; list-style: none; cursor: pointer; border-radius: 8px; }
+.contrib-list summary::-webkit-details-marker { display: none; }
+.contrib-list summary:focus-visible { outline-offset: 2px; }
+.c-chev { width: 14px; height: 14px; fill: none; stroke: var(--muted); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; opacity: 0.5; transition: transform 0.25s, opacity 0.2s; }
+.contrib-list summary:hover .c-chev, details[open] .c-chev { opacity: 1; }
+details[open] .c-chev { transform: rotate(180deg); }
 .contrib-list strong { display: block; font-weight: 600; font-size: 14.5px; }
 .contrib-list li span { color: var(--muted); font-size: 13px; }
 .c-icon { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; background: color-mix(in srgb, var(--k) 14%, transparent); }
@@ -158,6 +164,23 @@ body[data-alert='cured'] .live-dot { background: var(--t); box-shadow: 0 0 10px 
 .c-meta { display: grid; justify-items: end; gap: 2px; }
 .c-meta span { font-family: var(--mono); font-size: 12px !important; }
 .c-meta time { color: var(--muted); font-size: 12.5px; }
+/* Open row: a strand in the row's colour drops from the icon and carries the details */
+.c-body { display: grid; gap: 14px; margin: 0 0 16px 14px; padding-left: 29px; border-left: 1.5px solid color-mix(in srgb, var(--k) 55%, transparent); animation: c-open 0.28s cubic-bezier(0.16, 1, 0.3, 1); user-select: text; }
+@keyframes c-open { from { opacity: 0; transform: translateY(-4px); } }
+.c-body > p { font-size: 13.5px; line-height: 1.55; color: #b9c6d4; max-width: 60ch; }
+.c-acts { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; }
+.c-acts li { display: flex; gap: 8px; align-items: baseline; padding: 6px 10px; border-radius: 8px; background: var(--raise); font-size: 13px; }
+.contrib-list .c-acts li span { color: var(--bone); }
+.c-acts code, .c-ids code { font: 12px var(--mono); color: var(--muted); }
+.c-proof i { width: 10px; height: 10px; }
+.c-proof p { font-size: 13px; }
+.c-ids { display: grid; gap: 6px; font-size: 13px; }
+.c-ids div { display: grid; grid-template-columns: 7.5em 1fr; gap: 10px; align-items: center; }
+.c-ids dt { color: var(--muted); }
+.c-ids dd { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.c-copy { font-size: 12px; color: var(--muted); padding: 2px 8px; border-radius: 999px; transition: color 0.2s, background 0.2s; }
+.c-copy:hover { color: var(--bone); background: var(--raise); }
+.c-open { justify-self: start; margin-left: -14px; }
 
 /* ---------- Advanced ---------- */
 .view-advanced {
@@ -291,6 +314,13 @@ body[data-alert='cured'] .live-dot { background: var(--t); box-shadow: 0 0 10px 
 .edge-cue.top.on svg { animation: nudge-up 1.1s ease-in-out infinite; }
 .edge-cue.bottom.on svg { animation: nudge-down 1.1s ease-in-out infinite; }
 @keyframes nudge-up { 50% { transform: translateY(-4px); } }
+/* Which end of a scrolling helix is which (strand is newest-on-top) */
+.end-label { position: absolute; left: 50%; translate: -50% 0; font: 500 11px/1 var(--body); letter-spacing: 0.02em; color: var(--muted); opacity: 0.7; pointer-events: none; }
+.end-label.top { top: 8px; }
+.end-label.bottom { bottom: 8px; }
+body > .end-label { position: fixed; }
+body > .end-label.top { top: 52px; }
+body > .end-label.bottom { bottom: 14px; }
 @keyframes nudge-down { 50% { transform: translateY(4px); } }
 .genome-toast { transition: right 0.5s cubic-bezier(0.16, 1, 0.3, 1); }
 .has-detail .genome-toast { right: 440px; }
@@ -401,5 +431,5 @@ body[data-alert='watching'] .advisor-avatar canvas, body[data-alert='isolated'] 
 .review[data-busy] #review-again { pointer-events: none; opacity: 0.5; }
 
 @media (prefers-reduced-motion: reduce) {
-  .live-dot, .pair-dot, .edge-cue svg { animation: none !important; }
+  .live-dot, .pair-dot, .edge-cue svg, .c-body { animation: none !important; }
 }

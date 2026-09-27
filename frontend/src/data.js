@@ -625,19 +625,28 @@ function real() {
   });
 }
 
-function simulate() {
-  // History so the views aren't empty on first open
+// Past history (fake, both modes) so the views aren't empty on first open; live data lands after it.
+// Seeded, so the main and genome windows (each with its own copy of this module) invent the same past cures.
+function seedHistory() {
+  let s = 0x7ce11;
+  const r = () => ((s = (s + 0x6d2b79f5) | 0), (((s ^ (s >>> 15)) * (s | 1)) >>> 0) / 2 ** 32); // ponytail: tiny inline PRNG, only has to agree with itself
+  const shex = (n) => Array.from({ length: n }, () => ((r() * 256) | 0).toString(16).padStart(2, '0')).join('');
   for (let i = 0; i < 14; i++) {
-    const t = pick(THREATS);
-    state.genes.push({ threat: hex(32), gene: hex(32), name: t.name, from: i % 5 === 0 ? state.self : 'network', time: Date.now() - (14 - i) * 9 * HOUR, bytes: 380 + ((Math.random() * 420) | 0) });
+    const t = THREATS[(r() * THREATS.length) | 0];
+    state.genes.push({ threat: shex(32), gene: shex(32), name: t.name, from: i % 5 === 0 ? state.self : 'network', time: Date.now() - (14 - i) * 9 * HOUR, bytes: 380 + ((r() * 420) | 0) });
   }
-  for (const [kind, ago, back] of [['submit_threat', 50, 400_310], ['commit_gene', 49.9, 400_000]]) {
-    const b = { slot: state.stats.slot - back, kind, threat: hex(32), gene: kind === 'commit_gene' ? hex(32) : undefined, signers: 4, sig: hex(32), time: Date.now() - ago * HOUR, mine: true, by: state.self, name: THREATS[0].name };
+  // This device's own past blocks: it reported, then cured, one of the genes above.
+  const mine = state.genes.findLast((g) => g.from === state.self);
+  const ago = (Date.now() - mine.time) / HOUR;
+  for (const [kind, back, dt] of [['submit_threat', 400_310, 0.1], ['commit_gene', 400_000, 0]]) {
+    const b = { slot: state.stats.slot - back, kind, threat: mine.threat, gene: kind === 'commit_gene' ? mine.gene : undefined, signers: 4, sig: shex(32), time: Date.now() - (ago + dt) * HOUR, mine: true, by: state.self, name: mine.name };
     state.contributions.unshift(b);
   }
   state.stats.globalGenes = 1_800 + ((Math.random() * 300) | 0);
   state.stats.globalDevices = 23_000 + ((Math.random() * 4000) | 0);
+}
 
+function simulate() {
   // Global chain chatter from other networks
   (function chatter() {
     setTimeout(() => {
@@ -681,6 +690,7 @@ function simulate() {
   nextIncident = setTimeout(runIncident, rand(9000, 16000));
 }
 
+seedHistory();
 if (window.tcell?.onEvent) {
   state.source = 'live';
   real();

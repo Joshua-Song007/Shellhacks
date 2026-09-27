@@ -1,7 +1,8 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('tcell', {
-  openGenome: () => ipcRenderer.send('open-genome'),
+  openGenome: (gene) => ipcRenderer.send('open-genome', gene),
+  onGenomeSelect: (cb) => ipcRenderer.on('genome-select', (_e, gene) => cb(gene)),
   onEvent: (cb) => {
     const listener = (_e, msg) => cb(msg);
     ipcRenderer.on('tcell:event', listener);

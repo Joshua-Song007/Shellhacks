@@ -16,7 +16,8 @@ const baseOf = (hash) => 'ATGC'[parseInt(hash.slice(0, 2), 16) % 4];
 // bg = null renders transparent so the panel shows through; `length` is how much of the box the strand spans (>1 runs off the edges).
 // edgeScroll: hovering the top/bottom band of the box scrolls along the strand (and so does the wheel); onSelect(hit) fires on a block click.
 // edgeTop: px at the top that never scroll (window chrome overlaid on the canvas).
-export function createHelix(canvas, { hashes, capacity = 160, tilt = 0, bg = null, length = 0.86, thickness = 0.55, particles = 300, reduced = false, edgeScroll = false, edgeTop = 0, onHover = () => {}, onSelect = null, onEdge = () => {} }) {
+// visible: the strand stops shrinking past this many blocks; the rest scroll (needs edgeScroll). It opens on the newest, and returns there when a cure is added.
+export function createHelix(canvas, { hashes, capacity = 160, tilt = 0, bg = null, length = 0.86, thickness = 0.55, particles = 300, reduced = false, edgeScroll = false, edgeTop = 0, visible = Infinity, onHover = () => {}, onSelect = null, onEdge = () => {} }) {
   const SP = 0.34;
   const R = 0.62;
   const TWIST = 0.36;
@@ -126,6 +127,8 @@ export function createHelix(canvas, { hashes, capacity = 160, tilt = 0, bg = nul
   let pinned = -1; // selected block, held popped out while its details are open
   let scroll = 0; // strand-local offset along the axis
   let wheel = 0;
+  let follow = true; // glide to the newest end until the viewer scrolls; add() re-arms it
+  let seek = null; // { i, done } from reveal(): glide to block i, resolve once it has settled there
   let edge = 0; // -1 bottom band, 1 top band, 0 neither
   let phase = 0;
   let w = 1;
@@ -193,18 +196,36 @@ export function createHelix(canvas, { hashes, capacity = 160, tilt = 0, bg = nul
     const vh = 2 * camera.position.z * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
     const along = Math.abs(Math.cos(tilt)) * vh + Math.abs(Math.sin(tilt)) * vh * camera.aspect;
     const across = Math.abs(Math.sin(tilt)) * vh + Math.abs(Math.cos(tilt)) * vh * camera.aspect;
-    fit += (Math.min((across * thickness) / (R * 2), (along * length) / Math.max(1, count * SP)) - fit) * Math.min(1, dt * 3);
+    fit += (Math.min((across * thickness) / (R * 2), (along * length) / Math.max(1, Math.min(count, visible) * SP)) - fit) * Math.min(1, dt * 3);
     root.scale.setScalar(fit);
 
     if (edgeScroll) {
       // Depth into the top/bottom 16% band sets the speed; clamp so the strand's ends stop at the box edge.
       const band = 0.16 * h;
       const top = pointer.y - edgeTop;
-      const depth = !pointer.active || top < 0 ? 0 : top < band ? 1 - top / band : pointer.y > h - band ? -(1 - (h - pointer.y) / band) : 0;
+      let depth = !pointer.active || top < 0 ? 0 : top < band ? 1 - top / band : pointer.y > h - band ? -(1 - (h - pointer.y) / band) : 0;
+      // End padding = the band's depth, so the first/last block rests just inside it, not under it.
+      const max = Math.max(0, ((count - 1) / 2) * SP + SP + (0.16 * along) / fit - along / 2 / fit);
+      if ((depth > 0 && scroll >= max) || (depth < 0 && scroll <= -max)) depth = 0; // at the end: the band goes inert so its blocks can be hovered and clicked
       const e = Math.sign(depth);
       if (e !== edge) onEdge((edge = e));
-      const max = Math.max(0, ((count - 1) / 2) * SP + SP * 2 - along / 2 / fit);
       scroll += ease(Math.abs(depth)) * Math.sign(depth) * dt * 4.5 + wheel;
+      if (depth || wheel) follow = false;
+      if (seek) {
+        follow = false;
+        const want = Math.min(max, Math.max(-max, (seek.i - (count - 1) / 2) * SP));
+        intro.t = 1; // arriving from a click elsewhere: skip the build-in, the viewer is waiting on one block
+        scroll += (want - scroll) * Math.min(1, dt * 10);
+        if (Math.abs(want - scroll) < 0.08) {
+          scroll = want;
+          const { i, done } = seek;
+          seek = null;
+          requestAnimationFrame(() => {
+            const [x, y] = screenOf(tmp.copy(centers[i]).applyMatrix4(root.matrixWorld));
+            done({ index: i, x, y, color: `#${colBlock[i].getHexString()}` });
+          });
+        }
+      } else if (follow && pinned < 0 && visible < Infinity) scroll += (max - scroll) * Math.min(1, dt * 2);
       wheel = 0;
       scroll = Math.min(max, Math.max(-max, scroll));
     }
@@ -288,6 +309,12 @@ export function createHelix(canvas, { hashes, capacity = 160, tilt = 0, bg = nul
     add(hash) {
       const i = add(hash);
       if (i !== undefined) flash[i] = 1;
+      follow = true;
+    },
+    // Scroll block i into view (edgeScroll only); resolves with the same hit shape onSelect gets, once it's there.
+    reveal(i) {
+      if (!edgeScroll) return Promise.resolve(null);
+      return new Promise((done) => (seek = { i, done }));
     },
     pulse(i = (Math.random() * count) | 0) {
       flash[i] = 1;

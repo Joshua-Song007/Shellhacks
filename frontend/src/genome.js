@@ -22,7 +22,7 @@ function bestMask(actions) {
 // Most recent global cures, oldest first. Seeded here; new ones arrive as commit_gene blocks.
 const cure = (g) => {
   const t = THREATS.find((x) => x.name === g.name) ?? THREATS[0];
-  return { threat: hex(32), time: Date.now(), bytes: 380 + ((Math.random() * 420) | 0), devices: 40 + ((Math.random() * 9000) | 0), actions: t.actions, mask: bestMask(t.actions), ...g };
+  return { threat: hex(32), time: Date.now(), bytes: 380 + ((Math.random() * 420) | 0), devices: 40 + ((Math.random() * 9000) | 0), actions: t.actions, mask: bestMask(t.actions), ...Object.fromEntries(Object.entries(g).filter(([, v]) => v !== undefined)) }; // a missing field (live genes have no bytes until the feed reports them) keeps its default
 };
 const genes = Array.from({ length: 56 }, (_, i) =>
   cure({
@@ -33,6 +33,10 @@ const genes = Array.from({ length: 56 }, (_, i) =>
     time: Date.now() - (56 - i) * 2.7 * HOUR,
   }),
 );
+// This device's own immune memory is part of the global genome too, in time order, so clicking one in the main window finds it here.
+const slotAt = (t) => state.stats.slot - Math.round(((Date.now() - t) / HOUR) * 333);
+for (const g of state.genes) genes.push(cure({ gene: g.gene, name: g.name, threat: g.threat, time: g.time, bytes: g.bytes, slot: slotAt(g.time), signers: 4, devices: 1 }));
+genes.sort((a, b) => a.time - b.time);
 
 function ago(ms) {
   const m = Math.round((Date.now() - ms) / 60000);
@@ -54,6 +58,7 @@ const helix = createHelix($('#global-gl'), {
   particles: 1100,
   reduced,
   edgeScroll: true,
+  visible: 56,
   edgeTop: 44, // macOS traffic lights (hiddenInset title bar) sit over the canvas; hovering them must not scroll
   onEdge: (e) => {
     $('.edge-cue.top').classList.toggle('on', e > 0);
@@ -120,7 +125,7 @@ function select({ index, x, y, color }) {
   if (reduced) return (panel.hidden = false);
 
   const gh = ghost(x, y, color);
-  const tl = gsap.timeline({ onComplete: () => gh.remove() });
+  const tl = gsap.timeline({ onComplete: () => gh.remove() }).timeScale(1.6); // snappier: the panel is what the click was for
   if (wasOpen) {
     // Already open: the new block flies into the panel's colour chip and the contents re-stagger.
     const r = $('#d-chip').getBoundingClientRect();
@@ -177,7 +182,7 @@ function renderStats() {
 
 feed.addEventListener('block', ({ detail: b }) => {
   renderStats();
-  if (b.kind !== 'commit_gene') return;
+  if (b.kind !== 'commit_gene' || genes.some((g) => g.gene === b.gene)) return;
   genes.push(cure({ gene: b.gene, name: b.name ?? THREATS[(Math.random() * THREATS.length) | 0].name, slot: b.slot, signers: b.signers, threat: b.threat, time: b.time, devices: 1 }));
   helix.add(b.gene);
   const toast = $('#toast');
@@ -185,4 +190,33 @@ feed.addEventListener('block', ({ detail: b }) => {
   gsap.fromTo(toast, { opacity: 0, y: 8 }, { opacity: 1, y: 0, duration: reduced ? 0 : 0.5, ease: 'power3.out', overwrite: true });
   gsap.to(toast, { opacity: 0, delay: 3, duration: 0.6 });
 });
+// Genes already on chain (live: the ledger feed's first poll) arrive as 'genes', not blocks; no toast, they aren't new.
+feed.addEventListener('genes', () => {
+  const g = state.genes.at(-1);
+  if (genes.some((x) => x.gene === g.gene)) return;
+  genes.push(cure({ gene: g.gene, name: g.name, threat: g.threat, time: g.time, bytes: g.bytes, slot: state.stats.slot, signers: 3, devices: 1 }));
+  helix.add(g.gene);
+  renderStats();
+});
+
+// Opened from a block in the main window: scroll to that cure and open it as if clicked here.
+async function showGene(g) {
+  let i = genes.findIndex((x) => x.gene === g.gene);
+  if (i < 0) {
+    genes.push(cure({ ...g, slot: g.time ? slotAt(g.time) : state.stats.slot, signers: 3, devices: 1 }));
+    i = genes.length - 1;
+    helix.add(g.gene);
+  }
+  const at = await helix.reveal(i);
+  if (open !== i) select(at);
+}
+window.tcell?.onGenomeSelect?.(showGene);
+// Plain-browser dev path: the main window passes the cure in the URL hash.
+const fromHash = () => {
+  try {
+    if (location.hash.length > 1) showGene(JSON.parse(decodeURIComponent(location.hash.slice(1))));
+  } catch {}
+};
+addEventListener('hashchange', fromHash);
+fromHash();
 renderStats();

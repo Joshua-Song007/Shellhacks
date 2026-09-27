@@ -1,5 +1,5 @@
 import gsap from 'gsap';
-import { feed, state, inject, suppress, ALLELES, ACT_LABEL, evaluate, startPairing, cancelPairing, revoke, joinByUri, getReview } from './data.js';
+import { feed, state, inject, suppress, ALLELES, ACT_LABEL, ATTACK, THREATS, evaluate, startPairing, cancelPairing, revoke, joinByUri, getReview } from './data.js';
 import QRCode from 'qrcode';
 import { createHelix } from './helix.js';
 import { createMesh, LABEL, GLYPH } from './mesh.js';
@@ -279,6 +279,9 @@ const helix = createHelix($('#local-gl'), {
   length: 0.9,
   thickness: 0.62,
   reduced,
+  edgeScroll: true,
+  visible: 14,
+  onSelect: (h) => openGenome(state.genes[h.index]),
   onHover(h) {
     probe.classList.toggle('on', !!h);
     if (!h) return (probeI = -1);
@@ -291,7 +294,13 @@ const helix = createHelix($('#local-gl'), {
     $('span', probe).textContent = `${g.from === state.self ? 'Found by this device' : g.from === 'network' ? 'Learned from the network' : `Shared by ${nameOf(g.from)}`}, ${ago(g.time)}`;
   },
 });
-$('#open-genome').addEventListener('click', () => (window.tcell ? window.tcell.openGenome() : open('genome.html', 'genome', 'width=1100,height=760')));
+// With a cure, the genome window scrolls to it and opens its details.
+function openGenome(g) {
+  const pick = g && { gene: g.gene, name: g.name, threat: g.threat, time: g.time, bytes: g.bytes };
+  if (window.tcell) window.tcell.openGenome(pick);
+  else open(`genome.html${pick ? `#${encodeURIComponent(JSON.stringify(pick))}` : ''}`, 'genome', 'width=1100,height=760');
+}
+$('#open-genome').addEventListener('click', () => openGenome());
 
 // ---------- Contributions ----------
 function renderContrib() {
@@ -300,19 +309,55 @@ function renderContrib() {
   $('#contrib-sub').textContent = list.length
     ? `This device has written ${list.length} ${list.length === 1 ? 'block' : 'blocks'} to the shared chain${cures ? `, including ${cures} ${cures === 1 ? 'cure' : 'cures'} other people now use` : ''}.`
     : '';
+  const opened = new Set([...$('#contrib-list').querySelectorAll('details[open]')].map((d) => d.dataset.sig)); // a re-render must not snap an open row shut
   $('#contrib-list').innerHTML = list.length
     ? list
         .map(
-          (b) => `<li class="${{ commit_gene: 'is-cure', suppress_gene: 'is-off' }[b.kind] ?? 'is-report'}">
-            <span class="c-icon" aria-hidden="true"></span>
-            <div><strong>${{ commit_gene: 'Shared a cure', suppress_gene: 'Turned off a cure' }[b.kind] ?? 'Reported a new threat'}</strong>
-            <span>${esc(b.name ?? 'Unknown threat')}</span></div>
-            <div class="c-meta"><span>Block ${fmt(b.slot)}</span><time data-t="${b.time}">${ago(b.time)}</time></div>
-          </li>`,
+          (b) => `<li class="${{ commit_gene: 'is-cure', suppress_gene: 'is-off' }[b.kind] ?? 'is-report'}"><details data-sig="${b.sig}"${opened.has(b.sig) ? ' open' : ''}>
+            <summary>
+              <span class="c-icon" aria-hidden="true"></span>
+              <div><strong>${{ commit_gene: 'Shared a cure', suppress_gene: 'Turned off a cure' }[b.kind] ?? 'Reported a new threat'}</strong>
+              <span>${esc(b.name ?? 'Unknown threat')}</span></div>
+              <div class="c-meta"><span>Block ${fmt(b.slot)}</span><time data-t="${b.time}">${ago(b.time)}</time></div>
+              <svg class="c-chev" viewBox="0 0 20 20" aria-hidden="true"><path d="M6 8l4 4 4-4" /></svg>
+            </summary>
+            ${contribBody(b)}
+          </details></li>`,
         )
         .join('')
     : `<li class="empty">Nothing yet. When this device is the first to catch a threat, the cure it writes to the chain shows up here.</li>`;
 }
+
+// Expanded row: what the block did in plain words, then the receipts to prove it.
+function contribBody(b) {
+  const name = esc(b.name ?? 'this threat');
+  const say = {
+    commit_gene: `This device caught ${name} first, built a cure, and wrote it to the shared chain. Every T-Cell device can now use it without ever meeting the threat.`,
+    suppress_gene: `This device helped turn off the cure for ${name}. Devices stop using it as soon as they see this block.`,
+  }[b.kind] ?? `This device reported ${name} to the shared chain. Each independent report makes the network more confident the threat is real.`;
+  const acts = THREATS.find((t) => t.name === b.name)?.actions; // live blocks may carry a name the sim catalogue doesn't know; then there's nothing honest to list
+  const id = (label, v) => (v ? `<div><dt>${label}</dt><dd><code title="${v}">${v.slice(0, 8)}…${v.slice(-6)}</code><button class="c-copy" data-copy="${v}">Copy</button></dd></div>` : '');
+  return `<div class="c-body">
+    <p>${say}</p>
+    ${acts && b.kind !== 'suppress_gene' ? `<ul class="c-acts" aria-label="${b.kind === 'commit_gene' ? 'What the cure stops' : 'What it was seen doing'}">${acts.map((a) => `<li><span>${ACT_LABEL[a]}</span><code>${ATTACK[a]}</code></li>`).join('')}</ul>` : ''}
+    ${b.signers ? `<div class="d-proof c-proof"><span>${Array.from({ length: 5 }, (_, i) => `<i class="${i < b.signers ? 'on' : ''}"></i>`).join('')}</span><p>${b.signers} of 5 nodes re-ran it and signed</p></div>` : ''}
+    <dl class="c-ids">
+      <div><dt>Written</dt><dd>${new Date(b.time).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}, block ${fmt(b.slot)}</dd></div>
+      ${id('Receipt', b.sig)}${id('Threat ID', b.threat)}${id('Cure', b.gene)}
+    </dl>
+    ${b.kind === 'commit_gene' ? `<button class="btn-quiet c-open" data-act="genome" data-sig="${b.sig}">Show in the global genome</button>` : ''}
+  </div>`;
+}
+$('#contrib-list').addEventListener('click', (e) => {
+  const copy = e.target.closest('[data-copy]');
+  if (copy) {
+    navigator.clipboard?.writeText(copy.dataset.copy);
+    copy.textContent = 'Copied';
+    setTimeout(() => (copy.textContent = 'Copy'), 1400);
+  }
+  const go = e.target.closest('[data-act="genome"]');
+  if (go) openGenome(state.contributions.find((b) => b.sig === go.dataset.sig));
+});
 
 // ---------- Terminal ----------
 const term = $('#term');

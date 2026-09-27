@@ -79,16 +79,17 @@ fn main() {
         match client.all_genomes() {
             Ok(genomes) => {
                 let changes = genome_diff(&genomes, &mut seen_genomes);
-                if !first_tick {
-                    for g in changes {
-                        emit(serde_json::json!({
-                            "type": "genome",
-                            "threat_id": hex_encode(&g.threat_id),
-                            "gene_hash": hex_encode(&g.gene_hash),
-                            "bytes": g.bytes,
-                            "epigenetic_status": g.epigenetic_status,
-                        }));
-                    }
+                // Genomes are emitted on the first tick too: they're the chain's
+                // standing immune memory, so the dashboard loads what's already
+                // committed (and keeps it across restarts). Signatures still baseline.
+                for g in changes {
+                    emit(serde_json::json!({
+                        "type": "genome",
+                        "threat_id": hex_encode(&g.threat_id),
+                        "gene_hash": hex_encode(&g.gene_hash),
+                        "bytes": g.bytes,
+                        "epigenetic_status": g.epigenetic_status,
+                    }));
                 }
             }
             Err(e) => emit(serde_json::json!({"type": "error", "source": "all_genomes", "message": e.to_string()})),

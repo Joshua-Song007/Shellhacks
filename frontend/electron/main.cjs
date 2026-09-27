@@ -26,9 +26,11 @@ function makeWindow(opts, page) {
   return win;
 }
 
-ipcMain.on('open-genome', () => {
-  if (genomeWin && !genomeWin.isDestroyed()) return genomeWin.focus();
+ipcMain.on('open-genome', (_e, gene) => {
+  const select = () => gene && genomeWin.webContents.send('genome-select', gene); // a cure to jump to, from a click in the main window
+  if (genomeWin && !genomeWin.isDestroyed()) return genomeWin.focus(), select();
   genomeWin = makeWindow({ width: 1100, height: 760, minWidth: 640, minHeight: 480, title: 'Global genome' }, 'genome.html');
+  genomeWin.webContents.once('did-finish-load', select);
 });
 
 ipcMain.handle('tcell:mesh-command', (_e, cmd) => backend?.sendMeshCommand(cmd));
