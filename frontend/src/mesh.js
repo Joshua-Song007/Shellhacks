@@ -19,26 +19,32 @@ const el = (tag, attrs = {}, parent) => {
 export function createMesh(svg, devices, selfId, { reduced, onPick = () => {} }) {
   const W = 600;
   const H = 360;
-  const pos = {}; // id -> { x, y }, tweened when a device joins
+  const pos = {}; // id -> { x, y, s }, tweened when a device joins or leaves
   const gLinks = el('g', { class: 'links' }, svg);
   const gPulses = el('g', {}, svg);
   const gNodes = el('g', {}, svg);
   const nodes = {};
   let ids = [];
 
-  // Where every device should sit for the current roster.
+  // Where every device should sit for the current roster, and how big: one device fills the panel, and every
+  // device shrinks as more join (2x alone, ~1x at five, floor 0.55x) so a big household still fits.
   function targets() {
     const others = ids.filter((id) => id !== selfId);
-    const t = { [selfId]: [W / 2, H / 2 - 6] };
+    const s = Math.min(2, Math.max(0.55, 2.2 / Math.sqrt(ids.length)));
+    const cy = H / 2 - 19 * s; // a node reaches 34 above its centre (halo) and 72 below (name + status); centre that span, not the disc
+    // Two devices sit side by side; three or more ring the middle one.
+    if (others.length === 1) return { [selfId]: [W / 2 - 130, cy, s], [others[0]]: [W / 2 + 130, cy, s] };
+    const t = { [selfId]: [W / 2, cy, s] };
     others.forEach((id, i) => {
       const a = -Math.PI / 2 + ((i + 0.5) / others.length) * Math.PI * 2;
-      t[id] = [W / 2 + Math.cos(a) * 225, H / 2 - 6 + Math.sin(a) * 118];
+      t[id] = [W / 2 + Math.cos(a) * 225, cy + Math.sin(a) * 118, s];
     });
     return t;
   }
+  const to = (id, t) => ({ x: t[id][0], y: t[id][1], s: t[id][2] });
 
   function draw() {
-    for (const id of ids) nodes[id].g.setAttribute('transform', `translate(${pos[id].x} ${pos[id].y})`);
+    for (const id of ids) nodes[id].g.setAttribute('transform', `translate(${pos[id].x} ${pos[id].y}) scale(${pos[id].s})`);
     for (const l of gLinks.children) {
       const [a, b] = [pos[l.dataset.a], pos[l.dataset.b]];
       l.setAttribute('x1', a.x), l.setAttribute('y1', a.y), l.setAttribute('x2', b.x), l.setAttribute('y2', b.y);
@@ -47,11 +53,12 @@ export function createMesh(svg, devices, selfId, { reduced, onPick = () => {} })
 
   function addNode(d) {
     const g = el('g', { class: 'node', 'data-s': d.status }, gNodes);
-    if (d.id !== selfId) {
+    {
       // Other devices are buttons: picking one offers to remove it.
-      Object.entries({ tabindex: 0, role: 'button', 'aria-label': `${d.name}. Remove from this network` }).forEach(([k, v]) => g.setAttribute(k, v));
+      Object.entries({ tabindex: 0, role: 'button', 'aria-label': `${d.id === selfId ? `${d.name} (you)` : d.name}. Show details` }).forEach(([k, v]) => g.setAttribute(k, v));
       g.classList.add('pickable');
       g.addEventListener('click', () => onPick(d.id));
+      g.addEventListener('mousedown', (e) => e.preventDefault()); // a mouse pick shouldn't leave focus on the node, or the details dialog hands it back with a focus ring
       g.addEventListener('keydown', (e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onPick(d.id)));
     }
     el('circle', { class: 'halo', r: 34 }, g);
@@ -68,7 +75,7 @@ export function createMesh(svg, devices, selfId, { reduced, onPick = () => {} })
   }
 
   for (const d of devices) addNode(d);
-  for (const [id, [x, y]] of Object.entries(targets())) pos[id] = { x, y };
+  for (const [id, [x, y, s]] of Object.entries(targets())) pos[id] = { x, y, s };
   draw();
 
   // A device joined: it grows in from the centre while the others slide round to make room.
@@ -77,7 +84,7 @@ export function createMesh(svg, devices, selfId, { reduced, onPick = () => {} })
     pos[d.id] = { ...pos[selfId] };
     const t = targets();
     const tl = gsap.timeline({ onUpdate: draw, defaults: { duration: reduced ? 0 : 1, ease: 'expo.inOut' } });
-    for (const id of ids) tl.to(pos[id], { x: t[id][0], y: t[id][1] }, 0);
+    for (const id of ids) tl.to(pos[id], to(id, t), 0);
     if (reduced) return draw();
     tl.fromTo(g, { opacity: 0 }, { opacity: 1, duration: 0.6, ease: 'power2.out' }, 0.2);
     tl.fromTo(gLinks.querySelectorAll(`[data-b="${d.id}"]`), { opacity: 0 }, { opacity: 1, duration: 0.8 }, 0.5);
@@ -93,7 +100,7 @@ export function createMesh(svg, devices, selfId, { reduced, onPick = () => {} })
     const t = targets();
     const tl = gsap.timeline({ onUpdate: draw, defaults: { duration: reduced ? 0 : 0.9, ease: 'expo.inOut' } });
     tl.to([g, ...links], { opacity: 0, duration: reduced ? 0 : 0.35, ease: 'power2.in', onComplete: () => (g.remove(), links.forEach((l) => l.remove())) }, 0);
-    for (const x of ids) tl.to(pos[x], { x: t[x][0], y: t[x][1] }, reduced ? 0 : 0.25);
+    for (const x of ids) tl.to(pos[x], to(x, t), reduced ? 0 : 0.25);
     if (reduced) draw();
   }
 

@@ -71,7 +71,7 @@
         <header class="panel-head mesh-head">
           <div>
             <h2 id="mesh-title">Your local network</h2>
-            <p>When one device learns a cure, it passes it to the others. Select a device to remove it.</p>
+            <p>When one device learns a cure, it passes it to the others. Select a device to see how it's doing.</p>
           </div>
           <button class="btn btn-sm btn-line" id="add-device">
             <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12M4 10h12" /></svg>
@@ -133,9 +133,10 @@
         </div>
         <dl class="kv">
           <div><dt>Pipeline lag</dt><dd id="k-lag">—</dd></div>
-          <div><dt>Reader drops</dt><dd id="k-drop">0</dd></div>
-          <div><dt>Seq gaps</dt><dd id="k-gap">0</dd></div>
-          <div><dt>Source</dt><dd>eslogger</dd></div>
+          <div title="Events lost before they could be checked (reader buffer full or file-watch overflow)"><dt>Dropped</dt><dd id="k-drop">0</dd></div>
+          <div title="OS events that failed the TES format check and were safely ignored"><dt>Rejected</dt><dd id="k-rej">0</dd></div>
+          <div title="Gaps in the OS event sequence: events the kernel itself dropped"><dt>Seq gaps</dt><dd id="k-gap">0</dd></div>
+          <div title="eslogger = full Endpoint Security events (needs admin); libproc = process + file-watch events (no admin)"><dt>Source</dt><dd id="k-src">—</dd></div>
         </dl>
       </section>
 
@@ -201,6 +202,15 @@
         <h2 id="pair-fail-title"></h2>
         <p id="pair-fail"></p>
         <footer><button class="btn-quiet" data-act="cancel">Close</button><button class="btn" data-act="restart">Get a new code</button></footer>
+      </section>
+      <section class="pair-step" data-step="device" hidden>
+        <header class="dev-head">
+          <svg class="pair-glyph" viewBox="0 0 24 24" aria-hidden="true"><path id="dev-glyph" /></svg>
+          <div><h2 id="dev-name"></h2><p class="dev-status" id="dev-status"><span aria-hidden="true"></span><b></b></p></div>
+        </header>
+        <p id="dev-say"></p>
+        <dl class="c-ids dev-facts" id="dev-facts"></dl>
+        <footer><button class="btn-quiet dev-remove" data-act="ask-remove" id="dev-remove">Remove device</button><button class="btn" data-act="cancel">Close</button></footer>
       </section>
       <section class="pair-step" data-step="remove" hidden>
         <h2 id="rm-title"></h2>

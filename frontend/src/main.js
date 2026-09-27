@@ -163,13 +163,14 @@ feed.addEventListener('advice', ({ detail }) => {
 });
 
 // ---------- Mesh ----------
-const mesh = createMesh($('#mesh'), state.devices, state.self, { reduced, onPick: (id) => askRemove(id) });
+const mesh = createMesh($('#mesh'), state.devices, state.self, { reduced, onPick: (id) => showDevice(id) });
 
 // ---------- Add / remove trusted devices (FR-M-1 pairing, FR-M-7 revocation) ----------
 const pairDlg = $('#pair');
 let pairTimer = 0;
 let pairBar = null;
 let removing = null;
+let viewing = null; // device whose details are open, kept fresh as its status changes
 function pairStep(step) {
   pairDlg.querySelectorAll('.pair-step').forEach((s) => (s.hidden = s.dataset.step !== step));
   const shown = pairDlg.querySelector(`[data-step="${step}"]`);
@@ -208,6 +209,7 @@ function closePairing() {
   stopPairClock();
   cancelPairing();
   removing = null;
+  viewing = null;
   $('#join-uri').value = '';
   $('#join-wait').hidden = true;
   if (!pairDlg.open) return;
@@ -234,6 +236,11 @@ pairDlg.addEventListener('click', (e) => {
     clearTimeout(joinTimer);
     joinTimer = setTimeout(() => pairDlg.open && !$('#join-wait').hidden && feed.dispatchEvent(new CustomEvent('pair', { detail: { phase: 'error', error: 'unreachable' } })), 15000);
   }
+  if (act === 'ask-remove') askRemove(viewing);
+  if (act === 'copy-id') {
+    navigator.clipboard?.writeText(e.target.dataset.id);
+    e.target.textContent = 'Copied';
+  }
   if (act === 'revoke') {
     revoke(removing);
     closePairing();
@@ -248,7 +255,7 @@ const FAIL = {
   'malformed uri': ['That isn’t a pairing link', 'Paste the whole link that starts with tcell://pair from the other device.'],
 };
 feed.addEventListener('pair', ({ detail }) => {
-  if (!pairDlg.open || removing) return;
+  if (!pairDlg.open || removing || viewing) return;
   stopPairClock();
   clearTimeout(joinTimer);
   if (detail.phase === 'paired') {
@@ -265,8 +272,50 @@ function askRemove(id) {
   const d = state.devices.find((x) => x.id === id);
   if (!d || (d.status !== 'clean' && d.status !== 'cured')) return; // not while it's mid-response
   removing = id;
+  viewing = null;
   $('#rm-title').textContent = `Remove ${d.name}?`;
-  openDialog('remove');
+  if (pairDlg.open) pairStep('remove');
+  else openDialog('remove');
+}
+
+// Device details: how it's doing in plain words, what it has done for the network, and its identity.
+const DEV_SAY = {
+  clean: 'Safe. It’s watching for threats and passes any cure it learns to your other devices.',
+  watching: 'Something on it is acting suspiciously. T-Cell is keeping score and will freeze it if it crosses the line. No action needed.',
+  isolated: 'It froze a threat before it could do damage and is building a cure. No action needed.',
+  cured: 'It stopped a threat and shared the cure, so your other devices are protected too.',
+};
+function fillDevice() {
+  const d = state.devices.find((x) => x.id === viewing);
+  if (!d) return closePairing(); // removed while open
+  const self = d.id === state.self;
+  const inc = state.incident && !state.incident.done && state.incident.device === d.id ? state.incident : null;
+  $('#dev-glyph').setAttribute('d', GLYPH[d.kind]);
+  $('#dev-name').textContent = self ? `${d.name} (you)` : d.name;
+  $('.dev-head').dataset.s = d.status; // colours the icon ring and the status line
+  $('#dev-status b').textContent = LABEL[d.status];
+  $('#dev-say').textContent = DEV_SAY[d.status];
+  const row = (label, value) => `<div><dt>${label}</dt><dd>${value}</dd></div>`;
+  $('#dev-facts').innerHTML = [
+    inc && row('Current threat', esc(inc.threat)),
+    row('Last heard from', self ? 'Now' : ago(d.heartbeat)),
+    self && row('Cures it carries', fmt(state.genes.filter((g) => !g.suppressed).length)),
+    row(self ? 'Cures it found' : 'Cures it shared', fmt(state.genes.filter((g) => g.from === d.id).length)),
+    self && row('Blocks it wrote', fmt(state.contributions.length)),
+    d.pubkey && row('Device ID', `<code title="${d.pubkey}">${short(d.pubkey)}</code><button class="c-copy" data-act="copy-id" data-id="${d.pubkey}">Copy</button>`),
+  ]
+    .filter(Boolean)
+    .join('');
+  const rm = $('#dev-remove');
+  rm.hidden = self; // this device can't leave its own network
+  rm.disabled = d.status === 'watching' || d.status === 'isolated';
+  rm.title = rm.disabled ? 'Wait until it has finished dealing with the threat' : '';
+}
+function showDevice(id) {
+  viewing = id;
+  fillDevice();
+  if (pairDlg.open) pairStep('device');
+  else openDialog('device');
 }
 
 // ---------- Local genome helix ----------
@@ -412,13 +461,15 @@ function renderStats() {
   $('#g-eps').textContent = fmt(s.eps);
   $('#k-lag').textContent = `${s.lag} ms`;
   $('#k-drop').textContent = fmt(s.dropped);
+  $('#k-rej').textContent = fmt(s.rejected);
+  $('#k-src').textContent = s.source;
   $('#k-gap').textContent = fmt(s.gaps);
   spark('#sp-cpu', state.history.cpu, 100);
   spark('#sp-mem', state.history.mem, 100);
   spark('#sp-eps', state.history.eps);
 
   $('#peers').innerHTML = state.devices
-    .map((d) => `<tr><td>${esc(d.name)}${d.id === state.self ? ' <em>self</em>' : ''}</td><td><code>${short(d.pubkey)}</code></td><td><span class="st" data-s="${d.status}">${d.status}</span></td><td>${((Date.now() - d.heartbeat) / 1000).toFixed(1)}s</td></tr>`)
+    .map((d) => `<tr><td>${esc(d.name)}${d.id === state.self ? ' <em>self</em>' : ''}</td><td><code>${short(d.pubkey)}</code></td><td><span class="st" data-s="${d.status}">${d.status}</span></td><td>${d.id === state.self ? 'now' : `${((Date.now() - d.heartbeat) / 1000).toFixed(1)}s ago`}</td></tr>`)
     .join('');
 }
 
@@ -426,7 +477,7 @@ function renderLedger() {
   $('#ledger').innerHTML = state.blocks
     .slice(-14)
     .reverse()
-    .map((b) => `<tr class="${b.mine ? 'mine' : ''}"><td>${fmt(b.slot)}</td><td><span class="ix ix-${b.kind}">${b.kind}</span></td><td><code>${short(b.threat)}</code></td><td><code>${short(b.gene)}</code></td><td><code>${short(b.sig)}</code></td></tr>`)
+    .map((b) => `<tr class="${b.mine ? 'mine' : ''}"><td>${b.slot ? fmt(b.slot) : '—'}</td><td><span class="ix ix-${b.kind}">${b.kind}</span></td><td><code>${short(b.threat)}</code></td><td><code>${short(b.gene)}</code></td><td><code>${short(b.sig)}</code></td></tr>`)
     .join('');
 }
 
@@ -523,6 +574,7 @@ addEventListener('keydown', (e) => e.key === 'Escape' && closeInspect());
 feed.addEventListener('devices', () => {
   mesh.update(state.devices);
   renderHealth();
+  if (viewing) fillDevice();
 });
 feed.addEventListener('incident', ({ detail }) => {
   phase = detail.phase === 'clear' ? 'clean' : detail.phase;

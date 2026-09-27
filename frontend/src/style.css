@@ -98,12 +98,14 @@ body[data-alert='cured'] .live-dot { background: var(--t); box-shadow: 0 0 10px 
 .ring-shield path { fill: none; stroke: var(--s); stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; transition: stroke 0.6s; }
 .ring-shield .strand { stroke-width: 1; }
 .health h1 { font: 500 clamp(24px, 2.6vw, 34px)/1.12 var(--display); letter-spacing: -0.01em; max-width: 22ch; }
+.health-copy { min-width: 0; } /* let the middle column give way to the ring and advisor instead of pushing out of the panel */
 .health-copy > p { color: #b9c6d4; font-size: 16px; line-height: 1.55; margin-top: 12px; max-width: 42ch; }
-.facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); max-width: 480px; margin-top: 26px; border-top: 1px solid var(--faint); }
-.facts div { padding: 14px 0 0; }
-.facts div + div { padding-left: 20px; border-left: 1px solid var(--faint); }
+.facts { display: flex; flex-wrap: wrap; row-gap: 12px; width: max-content; max-width: 100%; margin-top: 26px; border-top: 1px solid var(--faint); } /* the rule hugs the stats; if space ever runs out a whole stat wraps, never its number */
+.facts div { padding: 14px clamp(16px, 2.2vw, 32px) 0; } /* columns hug their content with the same gap either side of each divider */
+.facts div:first-child { padding-left: 0; }
+.facts div + div { border-left: 1px solid var(--faint); }
 .facts dt { color: var(--muted); font-size: 12.5px; white-space: nowrap; margin-top: 4px; }
-.facts dd { font: 400 24px/1.2 var(--display); font-variant-numeric: tabular-nums; }
+.facts dd { font: 400 clamp(20px, 1.7vw, 24px)/1.2 var(--display); font-variant-numeric: tabular-nums; white-space: nowrap; } /* '12 of 12' stays one unit */
 
 /* Mesh */
 .mesh { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
@@ -229,7 +231,7 @@ details[open] .c-chev { transform: rotate(180deg); }
 .gauges strong { display: block; font: 400 20px/1.3 var(--display); font-variant-numeric: tabular-nums; }
 .gauges svg { width: 100%; height: 30px; margin-top: 4px; }
 .gauges polyline { fill: none; stroke: var(--a); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
-.kv { display: grid; grid-template-columns: repeat(4, auto); justify-content: space-between; margin-top: 14px; }
+.kv { display: grid; grid-template-columns: repeat(5, auto); justify-content: space-between; margin-top: 14px; }
 .kv dt { color: var(--muted); font-size: 12px; }
 .kv dd { font: 500 14px/1.4 var(--mono); }
 
@@ -396,7 +398,15 @@ body > .end-label.bottom { bottom: 14px; }
 .pair-join-input:focus-visible { outline: 2px solid var(--a); outline-offset: 2px; }
 .btn-danger { background: var(--threat); color: var(--bone); }
 .btn-danger:hover { background: #ff5c77; }
-#mesh .node.pickable { cursor: pointer; }
+#mesh .node.pickable { cursor: pointer; outline: none; } /* keyboard focus shows the halo instead of a box */
+.dev-head { display: flex; gap: 14px; align-items: center; }
+.dev-head .pair-glyph { flex: none; border-color: var(--s, var(--a)); }
+.dev-status { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.dev-status span { width: 8px; height: 8px; border-radius: 50%; background: var(--s); box-shadow: 0 0 8px var(--s); }
+.pair .dev-status b { color: var(--s); font-weight: 600; font-size: 13.5px; }
+.pair .dev-facts { margin-top: 2px; }
+.dev-remove { margin-right: auto; color: var(--threat); }
+.dev-remove:disabled { opacity: 0.4; cursor: not-allowed; }
 #mesh .node.pickable:hover .disc, #mesh .node.pickable:focus-visible .disc { fill: color-mix(in srgb, var(--s) 14%, var(--raise)); }
 #mesh .node.pickable:focus-visible { outline: none; }
 #mesh .node.pickable:focus-visible .halo { opacity: 1; }

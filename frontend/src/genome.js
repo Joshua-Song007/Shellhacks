@@ -163,6 +163,7 @@ function close() {
   gsap.set(gh, { left: r.left, top: r.top, xPercent: 0, yPercent: 0, rotation: 0, width: r.width, height: r.height, borderRadius: 18, backgroundColor: 'rgba(6, 10, 22, 0.9)' });
   gsap
     .timeline({ onComplete: () => (gh.remove(), open < 0 && helix.pin(-1)) })
+    .timeScale(1.6) // same pace as opening
     .to(panel.querySelectorAll('.d-in'), { opacity: 0, duration: 0.12 })
     .call(() => (panel.hidden = open < 0))
     // Same path in reverse: collapse to a bar at the block's height, then retract sideways into it.

@@ -33,7 +33,7 @@ export const state = {
   genes: [], // local immune memory: { threat, gene, name, from, time, bytes }
   blocks: [], // recent global chain activity, newest last
   contributions: [], // blocks this device wrote
-  stats: { cpu: 3, mem: 41, eps: 0, dropped: 0, gaps: 0, lag: 0.4, slot: 318_442_000 + ((Math.random() * 9000) | 0), globalGenes: 0, globalDevices: 0 },
+  stats: { cpu: 3, mem: 41, eps: 0, dropped: 0, rejected: 0, source: 'eslogger', gaps: 0, lag: 0.4, slot: 318_442_000 + ((Math.random() * 9000) | 0), globalGenes: 0, globalDevices: 0 },
   history: { cpu: [], mem: [], eps: [] },
   lineages: [], // { pid, exe, score, actions[] }
   incident: null,
@@ -438,7 +438,10 @@ function onScout(payload) {
   }
   if (payload.type === 'stats') {
     if (payload.pipeline) {
-      state.stats.dropped = payload.pipeline.rejected;
+      state.stats.rejected = payload.pipeline.rejected;
+      // Real loss: the reader's full-buffer drops (eslogger) or FSEvents overflow batches (libproc); the record's key names the source.
+      state.stats.dropped = payload.reader?.dropped ?? payload.libproc?.fs_dropped_batches ?? 0;
+      state.stats.source = payload.libproc ? 'libproc' : 'eslogger';
       state.stats.gaps = payload.pipeline.seq_gap_events;
       const now = Date.now();
       if (lastAccepted !== null) {
@@ -555,6 +558,8 @@ function onLedger(payload) {
       state.genes.push({ threat: payload.threat_id, gene: payload.gene_hash, name: 'Learned from network', from: 'network', time: Date.now(), bytes: payload.bytes, suppressed: payload.epigenetic_status });
       state.stats.globalGenes++; // best-effort: genes learned since this app started, not a true network-wide total (feed.rs's diff-only design has no way to report that) -- documented gap
       emit('genes', state.genes);
+      // A ledger row too. The genome account carries no tx signature or slot, so those stay blank rather than invented.
+      pushBlock({ kind: 'commit_gene', threat: payload.threat_id, gene: payload.gene_hash, name: 'Learned from network', slot: null, sig: undefined });
     }
     return;
   }
@@ -613,6 +618,7 @@ function real() {
   state.stats.cpu = 0;
   state.stats.mem = 0;
   state.stats.lag = 0;
+  state.stats.source = '—'; // filled from Scout's first real stats record, not the sim's default
   window.tcell.onEvent(({ channel, payload }) => {
     if (channel === 'scout') onScout(payload);
     else if (channel === 'soldier') onSoldier(payload);
@@ -635,12 +641,16 @@ function seedHistory() {
     const t = THREATS[(r() * THREATS.length) | 0];
     state.genes.push({ threat: shex(32), gene: shex(32), name: t.name, from: i % 5 === 0 ? state.self : 'network', time: Date.now() - (14 - i) * 9 * HOUR, bytes: 380 + ((r() * 420) | 0) });
   }
-  // This device's own past blocks: it reported, then cured, one of the genes above.
-  const mine = state.genes.findLast((g) => g.from === state.self);
-  const ago = (Date.now() - mine.time) / HOUR;
-  for (const [kind, back, dt] of [['submit_threat', 400_310, 0.1], ['commit_gene', 400_000, 0]]) {
-    const b = { slot: state.stats.slot - back, kind, threat: mine.threat, gene: kind === 'commit_gene' ? mine.gene : undefined, signers: 4, sig: shex(32), time: Date.now() - (ago + dt) * HOUR, mine: true, by: state.self, name: mine.name };
-    state.contributions.unshift(b);
+  // Each past cure left two blocks on the chain: the threat report, then the cure. The ones this device found are its contributions.
+  const slotAt = (t) => state.stats.slot - Math.round(((Date.now() - t) / HOUR) * 333); // same pace as genome.js's slotAt
+  for (const g of state.genes) {
+    const mine = g.from === state.self;
+    for (const [kind, dt] of [['submit_threat', 0.1 * HOUR], ['commit_gene', 0]]) {
+      const time = g.time - dt;
+      const b = { slot: slotAt(time), kind, threat: g.threat, gene: kind === 'commit_gene' ? g.gene : undefined, signers: kind === 'commit_gene' ? 4 : undefined, sig: shex(32), time, mine, by: mine ? state.self : 'network', name: g.name };
+      state.blocks.push(b);
+      if (mine) state.contributions.unshift(b);
+    }
   }
   state.stats.globalGenes = 1_800 + ((Math.random() * 300) | 0);
   state.stats.globalDevices = 23_000 + ((Math.random() * 4000) | 0);
@@ -679,6 +689,7 @@ function simulate() {
     s.eps = Math.round(180 + Math.random() * 120 + busy() * 900);
     s.lag = +(0.3 + Math.random() * 0.4 + busy() * 1.2).toFixed(2);
     if (busy() && Math.random() < 0.15) s.dropped++;
+    if (Math.random() < 0.02) s.rejected++;
     for (const k of ['cpu', 'mem', 'eps']) {
       state.history[k].push(s[k]);
       if (state.history[k].length > 60) state.history[k].shift();
