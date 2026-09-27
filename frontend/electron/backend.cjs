@@ -456,7 +456,20 @@ function startBackend(overrides = {}) {
     },
     getReview: advisor.getReview,
     runTestThreat() {
-      spawn('sh', [cfg.testThreatScript], { stdio: 'ignore' });
+      // Deliberately NOT `spawn('sh', [cfg.testThreatScript], ...)`: a shell
+      // observed with a positional (script-path) arg fails lineage.rs's
+      // is_boundary() interactive-shell check, same as electron's own
+      // process and the `sh -c` wrapper npm run dev uses -- none of them are
+      // boundaries, so Scout's fork/exec rollup merges the trigger into the
+      // SAME lineage as vite/meshd/feed/every Electron helper process, and
+      // suspend_all() SIGSTOPs every live member of a convicted lineage, not
+      // just the trigger -- i.e. the whole app freezes a few seconds in.
+      // A bare shell with NO positional args (fed the script path over
+      // stdin instead) IS classified as interactive by that same check, so
+      // it becomes a fresh lineage boundary and isolates the conviction to
+      // just itself + its own children.
+      const sh = spawn('sh', [], { stdio: ['pipe', 'ignore', 'ignore'] });
+      sh.stdin.end(`${cfg.testThreatScript}\n`);
     },
     suppressGene(threatIdHex) {
       const args = [threatIdHex, ...(cfg.rpcUrl ? [cfg.rpcUrl] : [])];
