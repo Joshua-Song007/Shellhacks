@@ -206,6 +206,10 @@ async function incident() {
 
 // suppress_gene (FR-L-7): 3-of-5 PoI, then every node flips Epigenetic_Status and stops running the gene.
 export async function suppress() {
+  return state.source === 'live' ? liveSuppress() : simSuppress();
+}
+
+async function simSuppress() {
   const inc = state.incident;
   if (!inc?.marks.commit || inc.suppress) return;
   inc.suppress = { sigs: 0 };
@@ -226,6 +230,35 @@ export async function suppress() {
   const others = state.devices.filter((x) => x.id !== state.self).map((x) => x.id);
   emit('mesh', { from: state.self, to: others });
   for (const id of others) log('mesh', 'ok', `${device(id).name}: epigenetic=suppressed, gene ${inc.gene.slice(0, 8)}… halted`);
+  changed();
+}
+
+// Real suppress_gene: calls backend.cjs -> crates/ledger-client's `suppress`
+// example (LedgerClient::suppress_gene) via IPC. No fake sig countdown --
+// the 3-of-5 PoI signing happens inside that one call, so `sigs` only ever
+// shows 0 (requested) or 3 (confirmed), never a live per-signer count (no
+// wire mechanism reports partial progress, same documented gap as
+// commit_gene's own confirmation path). No fake mesh-broadcast log lines
+// either -- meshd has no real "suppression" broadcast wired yet.
+async function liveSuppress() {
+  const inc = state.incident;
+  if (!inc?.marks.commit || inc.suppress) return;
+  inc.suppress = { sigs: 0 };
+  const changed = () => emit('threat', inc);
+  log('ledger', 'warn', `suppress_gene ${inc.gene.slice(0, 12)}… requested by ${device(state.self).name}: cure flagged as breaking a whitelisted app`);
+  changed();
+  try {
+    const result = await window.tcell.suppressGene(inc.threatId);
+    inc.suppress.sigs = 3;
+    pushBlock({ kind: 'suppress_gene', threat: inc.threatId, gene: inc.gene, sig: result.signature, mine: true, by: state.self, name: inc.threat });
+    const g = state.genes.find((x) => x.gene === inc.gene);
+    if (g) g.suppressed = true;
+    inc.suppress.done = Date.now();
+    log('ledger', 'ok', `suppress_gene ${result.signature.slice(0, 12)}… confirmed; Epigenetic_Status=suppressed`);
+  } catch (e) {
+    inc.suppress = null;
+    log('ledger', 'warn', `suppress_gene failed: ${e.message}`);
+  }
   changed();
 }
 
