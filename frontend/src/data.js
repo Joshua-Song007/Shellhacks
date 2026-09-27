@@ -462,7 +462,18 @@ function liveIncidentFor(rootExe) {
     inc = { device: state.self, threat: null, actions: [], threatId: null, t0: Date.now(), marks: {}, score: 0, tree: { parent: null, child: null, acts: [] }, search: null, gene: null, done: false };
     liveIncidents.set(rootExe, inc);
   }
-  state.incident = inc;
+  // Scout watches the WHOLE system, not just the deliberate test lineage --
+  // an unrelated real detection (e.g. a heavy dev-tool/build process crossing
+  // Stage-1 thresholds on its own) can start scoring at any moment, including
+  // mid-test, and used to unconditionally hijack the display pointer away from
+  // a test the user was actively watching, making it look like "the test
+  // threat" itself had changed into something else. `inc` (this lineage's own
+  // tracked object) is always updated normally by the caller regardless --
+  // only the DISPLAY pointer is deferred, so the unrelated lineage's real
+  // detect/cure/ledger activity still proceeds correctly in the background.
+  const cur = state.incident;
+  const curFinished = !cur || cur.done || !!cur.marks.immune;
+  if (cur === inc || curFinished) state.incident = inc;
   return inc;
 }
 
