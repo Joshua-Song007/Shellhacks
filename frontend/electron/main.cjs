@@ -1,4 +1,5 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
+const os = require('node:os');
 const path = require('node:path');
 const { startBackend } = require('./backend.cjs');
 
@@ -6,6 +7,26 @@ const DEV_URL = 'http://localhost:5174';
 const dev = !!process.env.TCELL_DEV;
 let genomeWin = null;
 let backend = null;
+
+// Packaged .app: binaries, trigger and traces ship in Contents/Resources (package.json build.extraResources).
+// PoI committee keys are secrets, never bundled: they're read from ~/.tcell/keys/poi-{1..5}.json on this Mac.
+function packagedPaths() {
+  const res = (p) => path.join(process.resourcesPath, p);
+  const keys = path.join(os.homedir(), '.tcell', 'keys');
+  process.env.TCELL_POI_DIR = keys; // for the suppress bin
+  return {
+    scoutBin: res('bin/scout'),
+    soldierBin: res('bin/soldier'),
+    meshdBin: res('bin/meshd'),
+    feedBin: res('bin/feed'),
+    suppressBin: res('bin/suppress'),
+    testThreatScript: res('scripts/test_threat.sh'),
+    trace: res('traces/demo_ransomware.ndjson'),
+    benignTrace: res('traces/benign_apps.ndjson'),
+    poiKeys: [1, 2, 3, 4, 5].map((n) => path.join(keys, `poi-${n}.json`)),
+    advisorUrl: process.env.TCELL_ADVISOR_URL || 'https://advisor-kr3vx.ondigitalocean.app', // no shell env when launched from Finder
+  };
+}
 
 function load(win, page) {
   if (!dev) return win.loadFile(path.join(__dirname, '../dist', page));
@@ -39,7 +60,8 @@ ipcMain.handle('tcell:advisor-review', (_e, force) => backend?.getReview(force) 
 ipcMain.handle('tcell:suppress-gene', (_e, threatIdHex) => backend?.suppressGene(threatIdHex));
 
 app.whenReady().then(() => {
-  backend = startBackend();
+  if (!app.isPackaged) app.dock?.setIcon(path.join(__dirname, '../build/icon.png')); // packaged builds get it from the .icns
+  backend = startBackend(app.isPackaged ? packagedPaths() : {});
   // Best-effort, real-time only -- a record emitted before a renderer's
   // listener attaches is lost, same as the Rust daemons themselves (no
   // history replay). Fine for non-critical startup lines.

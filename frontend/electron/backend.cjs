@@ -9,7 +9,8 @@
 //
 // Precondition: `cargo build --workspace --examples` must have already
 // run (this spawns the resulting target/debug/{scout,soldier,meshd} bins
-// and target/debug/examples/feed). A missing binary emits an `'error'`
+// and target/debug/examples/feed; a packaged .app instead passes its
+// bundled Contents/Resources paths in via main.cjs). A missing binary emits an `'error'`
 // event rather than throwing, so a partially-built workspace doesn't take
 // the whole Electron app down.
 //

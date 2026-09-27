@@ -1,5 +1,7 @@
 {
   "name": "tcell-app",
+  "version": "0.1.0",
+  "description": "T-Cell endpoint defense",
   "private": true,
   "type": "module",
   "main": "electron/main.cjs",
@@ -7,7 +9,9 @@
     "dev": "vite --port 5174 --strictPort & V=$!; TCELL_DEV=1 electron .; kill $V",
     "web": "vite --port 5174 --strictPort",
     "build": "vite build",
-    "start": "vite build && electron ."
+    "start": "vite build && electron .",
+    "build:bins": "cd .. && cargo build --release --workspace --examples && cc -O0 -o target/release/test_threat_payload scripts/test_threat.c",
+    "dist": "npm run build:bins && vite build && electron-builder --mac dmg"
   },
   "dependencies": {
     "gsap": "^3.15.0",
@@ -16,6 +20,67 @@
   },
   "devDependencies": {
     "electron": "^44.4.5",
+    "electron-builder": "^26.15.3",
     "vite": "^8.3.1"
+  },
+  "build": {
+    "appId": "fishing.t-cell.app",
+    "productName": "T-Cell",
+    "directories": {
+      "buildResources": "build",
+      "output": "release"
+    },
+    "files": [
+      "dist/**",
+      "electron/**"
+    ],
+    "extraResources": [
+      {
+        "from": "../target/release/scout",
+        "to": "bin/scout"
+      },
+      {
+        "from": "../target/release/soldier",
+        "to": "bin/soldier"
+      },
+      {
+        "from": "../target/release/meshd",
+        "to": "bin/meshd"
+      },
+      {
+        "from": "../target/release/examples/feed",
+        "to": "bin/feed"
+      },
+      {
+        "from": "../target/release/examples/suppress",
+        "to": "bin/suppress"
+      },
+      {
+        "from": "../scripts/test_threat.sh",
+        "to": "scripts/test_threat.sh"
+      },
+      {
+        "from": "../target/release/test_threat_payload",
+        "to": "scripts/test_threat_payload"
+      },
+      {
+        "from": "../crates/soldier/traces",
+        "to": "traces"
+      }
+    ],
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "category": "public.app-category.utilities",
+      "identity": "-",
+      "hardenedRuntime": false
+    }
   }
 }

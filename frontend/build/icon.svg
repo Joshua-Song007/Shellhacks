@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- Same mark as the website favicon, on the macOS 824px icon grid (100px margin). -->
+  <g transform="translate(100 100) scale(25.75)">
+    <rect width="32" height="32" rx="7.2" fill="#02040b"/>
+    <path d="M16 4l9 3.2V15c0 6-4 10.5-9 13-5-2.5-9-7-9-13V7.2zM12.8 10.5c0 4.5 6.4 7 6.4 11.5M19.2 10.5c0 4.5-6.4 7-6.4 11.5" stroke="#4ff5d2" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>

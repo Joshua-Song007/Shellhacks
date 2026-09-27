@@ -2,7 +2,8 @@
 //! Soldier refuses its gene (FR-L-7). Run with:
 //!   `cargo run -p ledger-client --example suppress -- <threat_id hex> [rpc url]`
 //! Payer = ~/.config/solana/id.json; committee = the first 3 PoI keypairs
-//! under crates/ledger-program/keys/ (gitignored).
+//! under crates/ledger-program/keys/ (gitignored), or under $TCELL_POI_DIR
+//! when set (the packaged app points it at ~/.tcell/keys).
 
 use ledger_client::LedgerClient;
 use solana_commitment_config::CommitmentConfig;
@@ -20,7 +21,8 @@ fn main() {
 
     let home = std::env::var("HOME").expect("HOME set");
     let payer = read_keypair_file(format!("{home}/.config/solana/id.json")).expect("payer wallet");
-    let keys = concat!(env!("CARGO_MANIFEST_DIR"), "/../ledger-program/keys");
+    // TCELL_POI_DIR: set by the packaged app (~/.tcell/keys), where the repo path doesn't exist.
+    let keys = std::env::var("TCELL_POI_DIR").unwrap_or_else(|_| concat!(env!("CARGO_MANIFEST_DIR"), "/../ledger-program/keys").into());
     let committee: Vec<Keypair> =
         (1..=3).map(|n| read_keypair_file(format!("{keys}/poi-{n}.json")).expect("poi keypair")).collect();
     let committee: Vec<&Keypair> = committee.iter().collect();

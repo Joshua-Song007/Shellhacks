@@ -32,7 +32,12 @@ SRC_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/tcell-demo.XXXXXX")
 trap 'rm -rf "$WORK"' EXIT
 
-cc -O0 -o "$WORK/payload" "$SRC_DIR/test_threat.c"
+# Packaged app ships a prebuilt payload (end users have no compiler); -X drops its quarantine xattr.
+if [ -x "$SRC_DIR/test_threat_payload" ]; then
+	cp -X "$SRC_DIR/test_threat_payload" "$WORK/payload"
+else
+	cc -O0 -o "$WORK/payload" "$SRC_DIR/test_threat.c"
+fi
 cp "$WORK/payload" "$WORK/tmutil"
 
 "$WORK/payload" burst
