@@ -353,13 +353,16 @@ function spawnScout(events, cfg, onLine) {
       restart: false, // this wrapper owns the retry/fallback decision, not spawnLineReader's own loop
       env: scoutCmd.env,
       onLine: (line) => {
-        sawLine = true;
+        // Scout's final stats record is printed on its way OUT (e.g. eslogger
+        // refused for lack of Full Disk Access), so it doesn't prove a working
+        // session -- counting it re-launched the same failing sudo forever.
+        if (!tryParseJson(line)?.final) sawLine = true;
         onLine(line);
       },
       onExit: () => {
         if (sawLine) setTimeout(launchElevated, RESPAWN_DELAY_MS);
         else {
-          events.emit('error', { source: 'scout', message: 'administrator access declined or unavailable; continuing with reduced (no-root) detection' });
+          events.emit('error', { source: 'scout', message: 'full detection unavailable (password declined, or T-Cell lacks Full Disk Access: System Settings > Privacy & Security > Full Disk Access, then relaunch); continuing with reduced (no-root) detection' });
           current = spawnLineReader(events, 'scout', cfg.scoutBin, scoutArgs({ ...cfg, scoutMode: 'libproc' }), { restart: true, onLine });
         }
       },
