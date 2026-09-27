@@ -92,7 +92,12 @@ function pushBlock(b) {
 function setStatus(id, status) {
   device(id).status = status;
   emit('devices', state.devices);
+  if (id === state.self && state.source === 'live') window.tcell.sendMeshCommand({ cmd: 'status', status }); // every own change reaches paired peers, not just isolate/cure
 }
+
+// meshd's pubkeys are libp2p protobuf-encoded: every Ed25519 key starts with the same 08011220 header, so names/ids come from the key after it.
+const keyTail = (pubkey) => pubkey.slice(8);
+const peerDevice = (pubkey) => ({ id: `dev-${keyTail(pubkey).slice(0, 8)}`, name: `Device ${keyTail(pubkey).slice(0, 6)}`, kind: 'laptop', status: 'clean', heartbeat: Date.now(), pubkey });
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -465,7 +470,6 @@ function onScout(payload) {
     setStatus(state.self, 'isolated');
     emit('incident', { device: state.self, phase: 'isolated', threat: inc.threat });
     log('scout', 'alert', `SIGSTOP lineage root ${d.wake.pid}; wake {Threat_ID=${d.wake.threat_id.slice(0, 16)}…, pid=${d.wake.pid}, schema=${d.wake.schema.length}}`);
-    window.tcell.sendMeshCommand({ cmd: 'status', status: 'isolated' });
     changed();
     return;
   }
@@ -576,7 +580,6 @@ function onLedger(payload) {
       emit('threat', inc);
     }
     emit('incident', { device: state.self, phase: 'cured', threat: known.name });
-    window.tcell.sendMeshCommand({ cmd: 'status', status: 'cured' });
     return;
   }
   if (payload.type === 'genome') {
@@ -608,8 +611,9 @@ function onMesh(payload) {
   }
   if (payload.type === 'paired') {
     if (deviceByPubkey(payload.pubkey)) return; // already known, no duplicate
-    const dev = { id: `dev-${payload.pubkey.slice(0, 8)}`, name: `Device ${payload.pubkey.slice(0, 6)}`, kind: 'laptop', status: 'clean', heartbeat: Date.now(), pubkey: payload.pubkey };
+    const dev = peerDevice(payload.pubkey);
     state.devices.push(dev);
+    window.tcell.sendMeshCommand({ cmd: 'status', status: device(state.self).status }); // a new peer only hears changes from now on, so tell it where we stand
     log('mesh', 'ok', `${dev.name} paired; pubkey ${payload.pubkey.slice(0, 12)}… added to the household roster`);
     emit('pair', { phase: 'paired', device: dev });
     emit('devices', state.devices);
@@ -618,8 +622,9 @@ function onMesh(payload) {
   if (payload.type === 'peer') {
     let d = deviceByPubkey(payload.pubkey);
     if (!d) {
-      d = { id: `dev-${payload.pubkey.slice(0, 8)}`, name: payload.name ?? `Device ${payload.pubkey.slice(0, 6)}`, kind: 'laptop', status: 'clean', heartbeat: Date.now(), pubkey: payload.pubkey };
+      d = peerDevice(payload.pubkey); // meshd's own name is the shared key header, so it's ignored
       state.devices.push(d);
+      window.tcell.sendMeshCommand({ cmd: 'status', status: device(state.self).status }); // first sighting (e.g. restored from state): sync once; later peer records don't echo back
     }
     d.status = payload.status ?? d.status;
     d.heartbeat = Date.now();

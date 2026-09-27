@@ -302,7 +302,7 @@ function fillDevice() {
     self && row('Cures it carries', fmt(state.genes.filter((g) => !g.suppressed).length)),
     row(self ? 'Cures it found' : 'Cures it shared', fmt(state.genes.filter((g) => g.from === d.id).length)),
     self && row('Blocks it wrote', fmt(state.contributions.length)),
-    d.pubkey && row('Device ID', `<code title="${d.pubkey}">${short(d.pubkey)}</code><button class="c-copy" data-act="copy-id" data-id="${d.pubkey}">Copy</button>`),
+    d.pubkey && row('Device ID', `<code title="${d.pubkey}">${short(d.pubkey.slice(8))}</code><button class="c-copy" data-act="copy-id" data-id="${d.pubkey}">Copy</button>`),
   ]
     .filter(Boolean)
     .join('');

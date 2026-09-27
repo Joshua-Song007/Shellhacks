@@ -114,11 +114,47 @@ function makeAdvisorRelay(events, cfg) {
     events.emit('advisor', { threat_id: incident.threat_id, narration, trend });
   }
 
+  // Demo history: fake past incidents (3 this week, matching the hero's "Stopped this week", 2 the week before)
+  // so the review has a trend to read. Sent once per key per week, straight to the advisor, never shown as live events.
+  const seededAt = path.join(TCELL_HOME, 'advisor_seeded.json');
+  const DAY_NS = 86_400n * 1_000_000_000n;
+  async function seedPast() {
+    const { pubHex } = loadKey();
+    try {
+      const m = JSON.parse(fs.readFileSync(seededAt, 'utf8'));
+      if (m.pub === pubHex && Date.now() - m.at < REVIEW_MAX_AGE_MS) return;
+    } catch {}
+    const now = BigInt(Date.now()) * 1_000_000n;
+    const ATTACK = { ExecFromTempOrCache: 'T1204', RapidFileModBurst: 'T1486', RecoverySnapshotTamper: 'T1490' };
+    const orders = [ // each conviction needs all three Stage-1 actions (scoring.rs); only the order varies
+      ['ExecFromTempOrCache', 'RapidFileModBurst', 'RecoverySnapshotTamper'],
+      ['ExecFromTempOrCache', 'RecoverySnapshotTamper', 'RapidFileModBurst'],
+    ];
+    const days = [0.6, 2.3, 4.8, 8.5, 11.2]; // days ago
+    const results = await Promise.allSettled(days.map((d, k) => {
+      const actions = orders[k % 2];
+      const incident = {
+        threat_id: crypto.randomBytes(32).toString('hex'),
+        ts_ns: (now - (DAY_NS * BigInt(Math.round(d * 1000))) / 1000n).toString(),
+        score: 110,
+        actions,
+        attack_ids: actions.map((a) => ATTACK[a]),
+        latency_ns: 2_000_000 + crypto.randomInt(7_000_000),
+      };
+      return signedPost('/v1/incident', { incident, raw: [] });
+    }));
+    if (results.some((r) => r.status === 'fulfilled')) {
+      fs.writeFileSync(seededAt, JSON.stringify({ pub: pubHex, at: Date.now() }));
+      fs.rmSync(reviewCache, { force: true }); // a review cached before the history existed is stale
+    }
+  }
+
   // Weekly review, cached on disk so it runs once a week, not per launch.
   // null = advisor off; { error } = unreachable (the UI says so, never blocks).
   const reviewCache = path.join(TCELL_HOME, 'advisor_review.json');
   async function getReview(force = false) {
     if (!cfg.advisorUrl) return null;
+    await seedPast().catch((e) => events.emit('error', { source: 'advisor', message: `seed: ${e.message}` }));
     if (!force) {
       try {
         const cached = JSON.parse(fs.readFileSync(reviewCache, 'utf8'));
