@@ -343,7 +343,7 @@ body > .end-label.bottom { bottom: 14px; }
   border: 1.5px solid color-mix(in srgb, var(--k) 55%, transparent); border-radius: 18px;
   box-shadow: 0 0 40px color-mix(in srgb, var(--k) 16%, transparent);
 }
-.detail header { display: grid; grid-template-columns: auto 1fr auto; gap: 14px; align-items: start; }
+.detail header { display: grid; grid-template-columns: auto 1fr auto; gap: 14px; align-items: start; position: sticky; top: -22px; background: inherit; z-index: 1; }
 .d-chip { width: 22px; height: 22px; margin: 6px 4px 0; border-radius: 3px; transform: rotate(45deg); background: var(--k); box-shadow: 0 0 16px var(--k); }
 .detail h2 { font: 500 19px/1.25 var(--display); }
 .detail header p { color: var(--muted); font-size: 13px; margin-top: 4px; }
