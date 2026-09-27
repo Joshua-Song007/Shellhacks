@@ -110,11 +110,13 @@ body[data-alert='cured'] .live-dot { background: var(--t); box-shadow: 0 0 10px 
 /* Mesh */
 .mesh { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
 #mesh { width: 100%; height: 100%; overflow: visible; }
-#mesh .links line { stroke: rgba(143, 163, 196, 0.18); stroke-width: 1; stroke-dasharray: 3 5; }
+#mesh .links .track { stroke: var(--a); stroke-opacity: 0.22; stroke-width: 2.5; }
+#mesh .links .flow { stroke: var(--a); stroke-opacity: 0.85; stroke-width: 1.6; stroke-linecap: round; stroke-dasharray: 1 11; filter: drop-shadow(0 0 3px var(--a)); animation: mesh-flow 1.2s linear infinite; }
+@keyframes mesh-flow { to { stroke-dashoffset: -12; } }
 #mesh .node .disc { fill: var(--raise); stroke: var(--s); stroke-width: 1.8; transition: stroke 0.5s; }
 #mesh .node .halo { fill: none; stroke: var(--s); stroke-width: 1.5; opacity: 0; }
 #mesh .node .glyph { fill: none; stroke: var(--bone); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
-#mesh .node text { text-anchor: middle; font-family: var(--body); }
+#mesh .node text { text-anchor: middle; font-family: var(--body); paint-order: stroke; stroke: var(--panel); stroke-width: 5px; stroke-linejoin: round; } /* knocks the links out behind labels */
 #mesh .node .name { fill: var(--bone); font-size: 13.5px; font-weight: 500; }
 #mesh .node .state { fill: var(--s); font-size: 12px; }
 #mesh .pulse { fill: var(--t); filter: drop-shadow(0 0 6px var(--t)); }
@@ -441,5 +443,5 @@ body[data-alert='watching'] .advisor-avatar canvas, body[data-alert='isolated'] 
 .review[data-busy] #review-again { pointer-events: none; opacity: 0.5; }
 
 @media (prefers-reduced-motion: reduce) {
-  .live-dot, .pair-dot, .edge-cue svg, .c-body { animation: none !important; }
+  .live-dot, .pair-dot, .edge-cue svg, .c-body, #mesh .links .flow { animation: none !important; }
 }

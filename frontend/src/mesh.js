@@ -68,7 +68,7 @@ export function createMesh(svg, devices, selfId, { reduced, onPick = () => {} })
     name.textContent = d.id === selfId ? `${d.name} (you)` : d.name;
     const st = el('text', { class: 'state', y: 67 }, g);
     st.textContent = LABEL[d.status];
-    for (const other of ids) el('line', { 'data-a': other, 'data-b': d.id }, gLinks);
+    for (const other of ids) for (const c of ['track', 'flow']) el('line', { class: c, 'data-a': other, 'data-b': d.id }, gLinks); // steady track + moving dashes = a live link
     ids.push(d.id);
     nodes[d.id] = { g, st };
     return g;
